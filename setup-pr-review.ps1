@@ -13,15 +13,40 @@ $DefaultPrOutputLocation = 'D:\analysis\pr_reviews'
 function Get-PrReviewConfig {
     param([string] $SkillRoot = $PSScriptRoot)
 
-    $config = @{ prOutputLocation = $DefaultPrOutputLocation }
+    $config = @{
+        prOutputLocation = $DefaultPrOutputLocation
+        reposRoots       = @('D:\projects')
+        repoPaths        = @{}
+        githubHost       = 'github.com'
+    }
     $basePath = Join-Path $SkillRoot 'pr-review.config.json'
     $localPath = Join-Path $SkillRoot 'pr-review.config.local.json'
 
     foreach ($path in @($basePath, $localPath)) {
         if (-not (Test-Path -LiteralPath $path)) { continue }
         $parsed = Get-Content -LiteralPath $path -Raw | ConvertFrom-Json
-        if ($parsed.prOutputLocation) {
-            $config.prOutputLocation = [string]$parsed.prOutputLocation
+        if ($parsed.prOutputLocation) { $config.prOutputLocation = [string]$parsed.prOutputLocation }
+        if ($parsed.githubHost) { $config.githubHost = [string]$parsed.githubHost }
+        if ($parsed.reposRoots) {
+            $config.reposRoots = @($parsed.reposRoots | ForEach-Object { [string]$_ })
+        } elseif ($parsed.reposRoot) {
+            $config.reposRoots = @([string]$parsed.reposRoot)
+        }
+        if ($parsed.repoPaths) {
+            foreach ($prop in $parsed.repoPaths.PSObject.Properties) {
+                $config.repoPaths[$prop.Name] = [string]$prop.Value
+            }
+        }
+    }
+
+    foreach ($root in $config.reposRoots) {
+        if ($root -and -not [System.IO.Path]::IsPathRooted($root)) {
+            throw "Each reposRoots entry must be an absolute path: $root"
+        }
+    }
+    foreach ($entry in $config.repoPaths.GetEnumerator()) {
+        if (-not [System.IO.Path]::IsPathRooted($entry.Value)) {
+            throw "repoPaths['$($entry.Key)'] must be an absolute path: $($entry.Value)"
         }
     }
 
@@ -126,9 +151,34 @@ function Set-BitbucketCliVerifiedMarker {
     Write-Host "Recorded Bitbucket CLI (bb) verification: $marker"
 }
 
+function Set-GitHubCliVerifiedMarker {
+    <#
+    Creates .gh-cli-verified next to this script after the first successful gh check.
+    Later runs skip calling gh --version when this file exists (see pr-review SKILL.md).
+    #>
+    $marker = Join-Path $PSScriptRoot '.gh-cli-verified'
+    if (Test-Path -LiteralPath $marker) {
+        Write-Host "GitHub CLI (gh) is configured and verified: $marker"
+        return
+    }
+    $gh = Get-Command gh -ErrorAction SilentlyContinue
+    if (-not $gh) {
+        Write-Warning "GitHub CLI (gh) not on PATH; skipping .gh-cli-verified marker. Install gh or add it to PATH, then re-run this script."
+        return
+    }
+    & gh --version
+    if ($LASTEXITCODE -ne 0) {
+        Write-Warning "gh --version failed; not writing .gh-cli-verified marker."
+        return
+    }
+    Get-Date -Format 'o' | Set-Content -LiteralPath $marker -Encoding utf8
+    Write-Host "Recorded GitHub CLI (gh) verification: $marker"
+}
+
 Write-Host "Syncing Cursor MCP config for repo: $RepoPath"
 Sync-CursorMcpConfig -RepoPath $RepoPath -PrReviewsPath $PSScriptRoot
 Set-BitbucketCliVerifiedMarker
+Set-GitHubCliVerifiedMarker
 
 $prConfig = Get-PrReviewConfig -SkillRoot $PSScriptRoot
 Ensure-PrReviewOutputRoot -OutputRoot $prConfig.prOutputLocation

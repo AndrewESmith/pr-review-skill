@@ -1,3 +1,6 @@
 {
-  "prOutputLocation": "D:\\analysis\\pr_reviews"
+  "prOutputLocation": "D:\\analysis\\pr_reviews",
+  "reposRoots": ["D:\\projects"],
+  "repoPaths": {},
+  "githubHost": "github.com"
 }

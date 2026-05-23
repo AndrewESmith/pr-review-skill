@@ -1,6 +1,6 @@
 ---
 name: Pull Request Review (C#/.NET)
-description: Perform a precise, constraint-driven review of a PR diff against C#/.NET standards and the linked Jira issue. Skill is to be used to review other team members pull requests so only apply this skill if a URL has been provided for the review
+description: Perform a precise, constraint-driven review of a Bitbucket or GitHub PR diff against C#/.NET standards and the linked Jira issue. Skill is to be used to review other team members pull requests so only apply this skill if a URL has been provided for the review
 ---
 
 # Skill: Pull Request Review (C#/.NET)
@@ -10,14 +10,38 @@ You are a senior c# and dot net code reviewer. Use caveman skill only in Summary
 
 ## Preamble (run first)
 
+### Open the repository in your editor first (recommended)
+
+Before invoking this skill, **open the PR repository as the workspace root** in your agent editor (e.g. **Cursor**: *File → Open Folder* on the clone, or open a PR **worktree**). Benefits:
+
+- **`setup-pr-review.ps1 -RepoPath`** targets the real tree (MCP lands in that repo’s `.cursor/`).
+- **Local repository sync** uses the workspace first—no path guessing when clones live in different parent folders.
+- Solution/project reads and line-level navigation match the PR branch after checkout.
+
+If the workspace is not the PR repo (wrong folder or skill-only workspace), the agent falls back to **`repoPaths`** / **`reposRoots`** in config, then asks you. You may also paste the clone’s absolute path in the review request.
+
 ### Prompt for URL if missing
 
 The skill requires a URL. If a URL has not been provided in user message, ask: "Please provide the PR URL to review." Then wait for response before proceeding
 
+### Detect PR host (provider)
+
+From the PR URL hostname (after **Load configuration** for `githubHost`):
+
+| Provider | Host match | CLI |
+|----------|------------|-----|
+| **bitbucket** | `bitbucket.org` | `bb` |
+| **github** | `github.com`, or hostname equals **`githubHost`** (GitHub Enterprise) | `gh` |
+| **unsupported** | anything else | — |
+
+If **unsupported**, stop and tell the user this skill supports **Bitbucket Cloud** and **GitHub** (including Enterprise when `githubHost` is set). Do not guess a CLI.
+
+Use **only** the workflow for the detected provider below. The review checklist, Jira fetch, config, and deliverable template are shared.
+
 ### Configure Jira MCP
 **Run `setup-pr-review.ps1` first** so Cursor MCP servers (e.g. Jira/Atlassian) are available for the repository under review. The script lives in **this skill’s directory** (same folder as `SKILL.md`), next to `setup-pr-review.ps1`. If `mcp.json` is not present beside the script, a built-in Atlassian MCP config is written automatically; an optional `mcp.json` in that folder overrides it.
 
-1. Set **`-RepoPath`** to the **absolute path to the git repository root** for the PR (usually the Cursor workspace root or the repo you have checked out for that PR).
+1. Set **`-RepoPath`** to the **absolute path to the git repository root** for the PR — ideally the folder you already opened in Cursor (see **Open the repository in your editor first**).
 2. Execute from a terminal (PowerShell):
 
 ```powershell
@@ -34,7 +58,12 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.agents\sk
 
 If the script exits successfully and `mcp.json` was already in sync, output may be minimal; still run it so the agent’s environment matches. **Do not skip this step** before fetching PR metadata, diff, comments, or Jira.
 
-On the **first** run where `bb` is on `PATH` and `bb version` succeeds, `setup-pr-review.ps1` creates **`.bb-cli-verified`** in this skill directory (next to `SKILL.md`). That file is machine-local and listed in `.gitignore`.
+On setup, `setup-pr-review.ps1` may create machine-local markers next to `SKILL.md` (listed in `.gitignore`):
+
+- **`.bb-cli-verified`** — after first successful `bb version`
+- **`.gh-cli-verified`** — after first successful `gh --version`
+
+You only need the marker for the provider you are reviewing; setup tries both when CLIs are on `PATH`.
 
 ### Load configuration
 
@@ -42,14 +71,25 @@ Skills have no built-in settings UI; read **`pr-review.config.json`** in **this 
 
 1. If **`pr-review.config.local.json`** exists beside it, read that file **after** the base config; any property in the local file **overrides** the base file (use for machine-specific paths without committing them).
 2. Use **`prOutputLocation`** as `<pr-output-location>` — an **absolute** directory path where review markdown files are written. Default if missing or unreadable: `D:\analysis\pr_reviews`.
-3. Ensure `<pr-output-location>` exists (`setup-pr-review.ps1` creates it when you run setup).
-4. Use this resolved path for all deliverable paths below; do **not** hardcode `D:\analysis\pr_reviews` unless it is the configured value.
+3. Use **`repoPaths`** — optional map of **repository id → absolute clone path** for repos that are not under a common parent (see **Resolve local clone path**). Keys:
+   - Bitbucket: `workspace/repo-slug` (from PR URL or `bb pr view`)
+   - GitHub: `owner/repo` (from PR URL or `gh pr view`)
+4. Use **`reposRoots`** — optional array of **absolute** parent directories to search when no `repoPaths` entry matches. Under each root, look for a subdirectory whose name equals the repo slug (last path segment), e.g. `my-service` for `workspace/my-service`. Default if omitted: `["D:\\projects"]`. Legacy **`reposRoot`** (single string) in JSON is treated as one entry in `reposRoots`.
+5. Use **`githubHost`** for GitHub Enterprise (default `github.com`). Treat PR URLs whose hostname equals `githubHost` as **github** provider; set `GH_HOST` or `gh --hostname <githubHost>` when running `gh` against Enterprise.
+6. Ensure `<pr-output-location>` exists (`setup-pr-review.ps1` creates it when you run setup).
+7. Use these resolved values below; do **not** hardcode paths unless they match config.
 
 Example `pr-review.config.json`:
 
 ```json
 {
-  "prOutputLocation": "D:\\analysis\\pr_reviews"
+  "prOutputLocation": "D:\\analysis\\pr_reviews",
+  "reposRoots": ["D:\\projects"],
+  "repoPaths": {
+    "acme/legacy-api": "E:\\client-work\\legacy-api",
+    "other-org/special-repo": "D:\\git\\special-repo"
+  },
+  "githubHost": "github.com"
 }
 ```
 
@@ -57,103 +97,139 @@ Example local override (`pr-review.config.local.json`, gitignored):
 
 ```json
 {
-  "prOutputLocation": "E:\\reviews\\pr"
+  "prOutputLocation": "E:\\reviews\\pr",
+  "repoPaths": {
+    "my-workspace/only-on-this-pc": "C:\\src\\only-on-this-pc"
+  }
 }
 ```
 
-### Bitbucket CLI (`bb`) — no repeated install checks
-Only use `bb` if URL provided is a bitbucket url. The URL should contain `https://bitbucket.org/`. If it is not a bitbucket url skip this step.
+### CLI install checks (provider-specific)
 
-Skills cannot store state by themselves. Use the marker file instead:
+Skills cannot store state by themselves. Use marker files next to `SKILL.md`:
 
-- **If `.bb-cli-verified` exists** next to this `SKILL.md`: assume Bitbucket CLI is installed and working. **Do not** run `where bb`, `Get-Command bb`, or `bb --version` as a prerequisite; go straight to `bb pr view` / `bb pr diff` / `bb pr view --comments`.
-- **If `.bb-cli-verified` is missing**: run **`setup-pr-review.ps1`** (which records the marker when `bb` succeeds), or verify `bb` once and let the user fix `PATH` / install — then rely on the marker on subsequent reviews.
-- **If a `bb` command fails** at runtime: treat as environment regression; you may remove `.bb-cli-verified` and re-run `setup-pr-review.ps1` after fixing `bb` (or re-verify manually).
+**Bitbucket (`bb`)** — only when provider is **bitbucket**:
+
+- **If `.bb-cli-verified` exists:** assume `bb` works. **Do not** run `bb --version` as a prerequisite; go straight to `bb pr view` / `bb pr diff` / `bb pr view --comments`.
+- **If missing:** run **`setup-pr-review.ps1`** or verify `bb` once (`bb auth login` on auth errors).
+- **If `bb` fails at runtime:** remove `.bb-cli-verified` and re-run setup after fixing.
+
+**GitHub (`gh`)** — only when provider is **github**:
+
+- **If `.gh-cli-verified` exists:** assume `gh` works. **Do not** run `gh --version` as a prerequisite; go straight to `gh pr view` / `gh pr diff` / comments fetch.
+- **If missing:** run **`setup-pr-review.ps1`** or verify `gh` once (`gh auth login` on auth errors).
+- **If `gh` fails at runtime:** remove `.gh-cli-verified` and re-run setup after fixing.
+- **GitHub Enterprise:** before `gh` commands, set `$env:GH_HOST = "<githubHost>"` from config (or use `gh --hostname <githubHost>` on each command if your `gh` version requires it).
 
 ## Required Inputs
 
-- **PR diff** — Use the Bitbucket CLI (`bb`) tool to access the changes in the pull request along with existing comments on the pull request.
+- **PR diff** — unified diff from the provider CLI (`bb pr diff` or `gh pr diff`).
 - **PR metadata** — title, description, source/target branches, reviewers where relevant.
+- **Existing PR comments** — provider comment commands (see provider section) so findings do not duplicate the thread.
 - **Jira key** (e.g., from PR title/branch like `Feature/NV-6901 some-title`).
 - **Repo context** (solution, projects) for inspections.
 
-**Workflow order:** (0) Run **`setup-pr-review.ps1`** for the repo (see **Preamble**). (0b) **Load configuration** (`prOutputLocation`). (1) Gather Bitbucket inputs. (2) Optionally **Local repository sync** so on-disk reads match the PR (see **Local repository sync (recommended)**).
+**Workflow order:** (0) Prefer workspace already opened in editor. (1) Run **`setup-pr-review.ps1`** with that repo’s root as `-RepoPath`. (2) **Detect PR host**. (3) **Load configuration**. (4) Gather provider inputs (`bb` or `gh`). (5) **Resolve local clone path** if local sync needed. (6) **Local repository sync** (optional).
 
-**When using Bitbucket CLI (`bb`):** map inputs explicitly — title/body/branches/reviewers from `bb pr view`; diff from `bb pr diff`; existing review and inline comments from `bb pr view --comments` (see **Bitbucket CLI (`bb`)**).
+## Resolve local clone path
+
+Use this **only** when you need the tree on disk (local sync, csproj/solution reads beyond diff). Apply in order; stop at the first match. **Repository id** = Bitbucket `workspace/slug` or GitHub `owner/repo` from the PR URL / `pr view`.
+
+1. **Cursor (or editor) workspace root** — If the workspace folder is a git repo and `git remote get-url origin` refers to the same repository id as the PR, use `git rev-parse --show-toplevel` as `<clone-path>`. This is the normal case when the user followed **Open the repository in your editor first**.
+2. **`repoPaths[repository-id]`** — Exact path from config (merged base + local JSON). Verify the folder exists and origin matches; if missing on disk, go to step 4.
+3. **`reposRoots` search** — For each root in order, test `<root>\<repo-slug>` where `repo-slug` is the last segment of the repository id (e.g. `my-service`). Use the first path that exists, is a git repo, and whose `origin` matches the PR repo. Do **not** assume all clones share one parent beyond this search list.
+4. **User** — Ask: “Where is the local clone for `<repository-id>`? (absolute path)”. If they provide a path, use it. If they decline or unknown, **skip local sync**; state in the review that inspection used PR diff/API only (no local tree verification).
+5. **Optional:** User may include `Clone path: D:\...\repo` in the initial message — treat as step 2 override for that review only.
+
+Never invent paths. Never `cd` to a non-existent directory.
 
 ## Bitbucket CLI (`bb`)
 
-For **Bitbucket Cloud** repositories, use the Bitbucket CLI — source layout and development notes: [`bb` in bitbucket-cli](https://github.com/dlbroadfoot/bitbucket-cli/tree/main/bb). Configure access with `bb auth login` or existing credentials when `bb pr …` fails with auth errors (auth is separate from the **install/PATH** cache above). This workflow targets Bitbucket; it is **not** a substitute for GitHub `gh`.
+**Provider: bitbucket only.** Bitbucket CLI: [`bb` in bitbucket-cli](https://github.com/dlbroadfoot/bitbucket-cli/tree/main/bb). Auth: `bb auth login` when `bb pr …` fails.
 
 **Gather inputs (recommended order):**
 
 1. `bb pr view <number|PR_URL> [-R [HOST/]WORKSPACE/REPO]` — title, description, branches, reviewers.
 2. `bb pr diff <number|PR_URL> [-R …]` — unified diff for the checklist.
-3. `bb pr view <number|PR_URL> --comments` (or `-c`) — overview and inline comments; use this so findings do not duplicate or ignore the existing thread.
-4. Optional: `bb pr checkout <number|PR_URL>` — local read-only inspection; prefer the full procedure in **Local repository sync (recommended)** when reading the tree beyond the unified diff.
+3. `bb pr view <number|PR_URL> --comments` (or `-c`) — overview and inline comments.
+4. Optional: `bb pr checkout <number|PR_URL>` — prefer **Local repository sync** for full tree reads.
 
-**Repo selection:** Prefer a **full PR URL** when the open workspace is not the same repository as the PR. If you only have a PR **number**, pass **`-R [HOST/]WORKSPACE/REPO`** when the current git remote does not match that repo.
+**Repo selection:** Prefer a **full PR URL** when the workspace is not the PR repo. With only a PR **number**, use **`-R [HOST/]WORKSPACE/REPO`** when the git remote does not match.
+
+**Limitations:** `bb pr review` is for your own approve/request-changes — not others’ reviews. Use `bb pr view --comments` or `bb api` for more detail. For JSON, use **`bb api`** if `bb pr view` lacks `--json`.
+
+## GitHub CLI (`gh`)
+
+**Provider: github only.** [GitHub CLI](https://cli.github.com/). Auth: `gh auth login` (or `gh auth login --hostname <githubHost>` for Enterprise).
+
+**Gather inputs (recommended order):**
+
+1. `gh pr view <number|PR_URL> --json title,body,baseRefName,headRefName,author,reviewRequests,reviews` — metadata (add fields if needed). For Enterprise, set `GH_HOST` or `--hostname` per config.
+2. `gh pr diff <number|PR_URL>` — unified diff for the checklist.
+3. Comments for **Existing discussion**:
+   - `gh pr view <number|PR_URL> --comments` — conversation summary when sufficient.
+   - For inline review threads, also use `gh api repos/{owner}/{repo}/pulls/{number}/comments` and/or `gh api graphql` with a PR review-comments query if the summary is incomplete.
+4. Optional: `gh pr checkout <number|PR_URL>` — prefer **Local repository sync** for full tree reads.
+
+**Repo selection:** Prefer a **full PR URL** (`https://github.com/owner/repo/pull/123` or `https://<githubHost>/owner/repo/pull/123`). With only a number, run `gh` from a clone whose `origin` matches that repo, or pass `--repo owner/repo`.
+
+**Limitations:** Review submission uses `gh pr review` (your vote only). Listing all review threads may require **`gh api`** beyond `gh pr view --comments`.
 
 ## Local repository sync (recommended)
 
-`bb pr diff` is sufficient for **what changed**. Use a **local checkout** when the review needs **whole files**, solution/project layout, builds, or **agreement between disk and the PR** (wrong branch in the workspace makes line-level reads misleading).
+Provider **`pr diff`** is sufficient for **what changed**. Use a **local checkout** when the review needs **whole files**, solution/project layout, builds, or **disk aligned with the PR branch**.
 
-**Path convention (this environment):** Git clones live under **`D:\projects`**. The folder name matches the **Bitbucket repository slug** as in the PR URL or `bb pr view` (e.g. `workspace/my-service` → `D:\projects\my-service`). If a clone uses a different directory name, use the path that exists on disk or ask the user.
+**Prerequisite:** Resolve **`<clone-path>`** via **Resolve local clone path** (workspace first). `Set-Location <clone-path>` before the steps below.
 
 **Steps (PowerShell):**
 
-1. From `bb pr view` or the PR URL, identify the repo slug and run `Set-Location D:\projects\<repo-slug>`. Confirm you are in the intended repo (`git rev-parse --show-toplevel`) if ambiguous.
-2. `git fetch origin` (and other remotes if the source branch is not on `origin`).
-3. Check for local WIP (dirty tree):
+1. Confirm repo: `git rev-parse --show-toplevel` and that `origin` matches the PR repository id.
+2. `git fetch origin` (and other remotes if the head branch is not on `origin`).
+3. Dirty tree check:
 
 ```powershell
 $dirty = -not [string]::IsNullOrWhiteSpace((git status --porcelain))
 ```
 
-4. If **NOT dirty**, checkout the PR branch in-place:
+4. If **NOT dirty**, checkout in-place:
 
 ```powershell
+# Bitbucket
 bb pr checkout <number|PR_URL> [-R [HOST/]WORKSPACE/REPO]
+
+# GitHub (set GH_HOST for Enterprise if needed)
+gh pr checkout <number|PR_URL>
 ```
 
-5. If **dirty**, prefer an isolated **worktree** for the PR (keeps your WIP untouched):
+5. If **dirty**, use a **worktree**:
 
 ```powershell
 $repoRoot = (git rev-parse --show-toplevel).Trim()
-$prId = "<number>"   # or keep the PR URL string
+$prId = "<number>"
 $worktreeRoot = Split-Path $repoRoot -Parent
 $worktreePath = Join-Path $worktreeRoot "_pr-review-$prId"
 
-# Create a worktree folder (no branch assumptions; bb will switch it)
 git worktree add $worktreePath --no-checkout
-
 Set-Location $worktreePath
 git fetch origin
-bb pr checkout <number|PR_URL> [-R [HOST/]WORKSPACE/REPO]
+# Bitbucket: bb pr checkout …
+# GitHub: gh pr checkout …
 ```
 
-6. **Fallback** if `bb pr checkout` is missing or fails: use the **source branch** name from `bb pr view` — e.g. `git fetch origin <source-branch>` then `git checkout <source-branch>` (adjust remote and branch names to match the repo).
+6. **Fallback** if provider checkout fails: fetch and checkout the **head branch** from `pr view` (`headRefName` on GitHub, source branch on Bitbucket).
 
-**After checkout:** Prefer opening the **checked-out working directory** as the Cursor workspace:
+**After checkout:** Open the checked-out directory in Cursor (in-place clone or `$worktreePath`).
 
-- If you checked out **in-place**: open **`D:\projects\<repo-slug>`** (or confirm the active workspace is that repo **on the PR branch**)
-- If you used a **worktree**: open **`$worktreePath`**
+Keep using provider **`pr diff`** and **comments** for authoritative diff/thread; checkout does not replace them.
 
-Keep using **`bb pr diff`** and **`bb pr view --comments`** for the authoritative diff and thread; checkout does not replace those.
-
-**Worktree cleanup (when done):**
+**Worktree cleanup:**
 
 ```powershell
 Set-Location $repoRoot
 git worktree remove $worktreePath
 ```
 
-**Scope:** **Read-only inspection** for the review. Do not commit, merge, or push as part of the deliverable unless the user explicitly requests it.
-
-**Limitations:**
-
-- `bb pr review` is for **your** approve / request-changes / unapprove — not for listing others’ reviews. Use `bb pr view --comments` or `bb api` when you need more than the text view.
-- `bb pr view` may not support `--json` on all builds; for structured or scripted data, use **`bb api`** against the Bitbucket REST API.
+**Scope:** Read-only inspection. Do not commit, merge, or push unless the user explicitly requests it.
 
 ## Constraints & Style
 
@@ -247,8 +323,8 @@ Rules:
 - Do not: second file, `reports/` subfolder, EOF/format nits, generic non-diff advice
 - Re-review: append `## Re-review <yyyy-MM-dd>` unless user says overwrite
 - Before writing: read existing `*.md` in folder; don’t re-raise settled findings
-- If a Jira key is present in the PR title/branch (often visible in `bb pr view` when using Bitbucket), **fetch issue** and compare with the implementation (acceptance criteria, status).
-- If **prior PR comments** are available (e.g. `bb pr view --comments`), synthesize them in **Existing discussion** and avoid duplicating settled points unless you disagree or add evidence.
+- If a Jira key is present in the PR title/branch (from `pr view` or URL), **fetch issue** and compare with the implementation (acceptance criteria, status).
+- If **prior PR comments** are available (Bitbucket: `bb pr view --comments`; GitHub: `gh pr view --comments` and API as needed), synthesize them in **Existing discussion** and avoid duplicating settled points unless you disagree or add evidence.
 - If **no tests changed**, flag a “human review” check to confirm no tests are required.
   
 After write: open in Cursor (`cursor "<path>"`).
@@ -278,7 +354,7 @@ Follow routing in Review Scope item 5.
 - If No Jira key in branch then review against PR description only
 
 ## Existing discussion
-(skip if `bb pr view --comments` empty)
+(skip if provider comment fetch is empty)
 
 ## Findings
 ### F1 — <short title>
