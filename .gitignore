@@ -1,0 +1,6 @@
+.bb-cli-verified
+pr-review.config.local.json
+
+# Cursor MCP (local duplicate of global; not committed)
+.cursor/mcp.json
+

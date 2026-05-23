@@ -36,6 +36,31 @@ If the script exits successfully and `mcp.json` was already in sync, output may 
 
 On the **first** run where `bb` is on `PATH` and `bb version` succeeds, `setup-pr-review.ps1` creates **`.bb-cli-verified`** in this skill directory (next to `SKILL.md`). That file is machine-local and listed in `.gitignore`.
 
+### Load configuration
+
+Skills have no built-in settings UI; read **`pr-review.config.json`** in **this skill’s directory** (same folder as `SKILL.md`).
+
+1. If **`pr-review.config.local.json`** exists beside it, read that file **after** the base config; any property in the local file **overrides** the base file (use for machine-specific paths without committing them).
+2. Use **`prOutputLocation`** as `<pr-output-location>` — an **absolute** directory path where review markdown files are written. Default if missing or unreadable: `D:\analysis\pr_reviews`.
+3. Ensure `<pr-output-location>` exists (`setup-pr-review.ps1` creates it when you run setup).
+4. Use this resolved path for all deliverable paths below; do **not** hardcode `D:\analysis\pr_reviews` unless it is the configured value.
+
+Example `pr-review.config.json`:
+
+```json
+{
+  "prOutputLocation": "D:\\analysis\\pr_reviews"
+}
+```
+
+Example local override (`pr-review.config.local.json`, gitignored):
+
+```json
+{
+  "prOutputLocation": "E:\\reviews\\pr"
+}
+```
+
 ### Bitbucket CLI (`bb`) — no repeated install checks
 Only use `bb` if URL provided is a bitbucket url. The URL should contain `https://bitbucket.org/`. If it is not a bitbucket url skip this step.
 
@@ -52,7 +77,7 @@ Skills cannot store state by themselves. Use the marker file instead:
 - **Jira key** (e.g., from PR title/branch like `Feature/NV-6901 some-title`).
 - **Repo context** (solution, projects) for inspections.
 
-**Workflow order:** (0) Run **`setup-pr-review.ps1`** for the repo (see **Preamble**). (1) Gather Bitbucket inputs. (2) Optionally **Local repository sync** so on-disk reads match the PR (see **Local repository sync (recommended)**).
+**Workflow order:** (0) Run **`setup-pr-review.ps1`** for the repo (see **Preamble**). (0b) **Load configuration** (`prOutputLocation`). (1) Gather Bitbucket inputs. (2) Optionally **Local repository sync** so on-disk reads match the PR (see **Local repository sync (recommended)**).
 
 **When using Bitbucket CLI (`bb`):** map inputs explicitly — title/body/branches/reviewers from `bb pr view`; diff from `bb pr diff`; existing review and inline comments from `bb pr view --comments` (see **Bitbucket CLI (`bb`)**).
 
@@ -209,7 +234,9 @@ git worktree remove $worktreePath
 
 Write **exactly one** file:
 
-`D:\analysis\pr_reviews\<sanitized-source-branch>\<JIRA-KEY>_<slug>_<yyyyMMdd_HHmm>.md`
+`<pr-output-location>\<sanitized-source-branch>\<JIRA-KEY>_<slug>_<yyyyMMdd_HHmm>.md`
+
+`<pr-output-location>` is **`prOutputLocation`** from **Load configuration** (not a literal folder name).
 
 Rules:
 

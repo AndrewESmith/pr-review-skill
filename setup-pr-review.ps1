@@ -8,6 +8,41 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
+$DefaultPrOutputLocation = 'D:\analysis\pr_reviews'
+
+function Get-PrReviewConfig {
+    param([string] $SkillRoot = $PSScriptRoot)
+
+    $config = @{ prOutputLocation = $DefaultPrOutputLocation }
+    $basePath = Join-Path $SkillRoot 'pr-review.config.json'
+    $localPath = Join-Path $SkillRoot 'pr-review.config.local.json'
+
+    foreach ($path in @($basePath, $localPath)) {
+        if (-not (Test-Path -LiteralPath $path)) { continue }
+        $parsed = Get-Content -LiteralPath $path -Raw | ConvertFrom-Json
+        if ($parsed.prOutputLocation) {
+            $config.prOutputLocation = [string]$parsed.prOutputLocation
+        }
+    }
+
+    if (-not [System.IO.Path]::IsPathRooted($config.prOutputLocation)) {
+        throw "prOutputLocation must be an absolute path: $($config.prOutputLocation)"
+    }
+
+    return $config
+}
+
+function Ensure-PrReviewOutputRoot {
+    param([string] $OutputRoot)
+
+    if (-not (Test-Path -LiteralPath $OutputRoot)) {
+        New-Item -ItemType Directory -Path $OutputRoot -Force | Out-Null
+        Write-Host "Created PR review output folder: $OutputRoot"
+    } else {
+        Write-Host "PR review output folder: $OutputRoot"
+    }
+}
+
 $DefaultMcpJson = @'
 {
   "mcpServers": {
@@ -94,3 +129,6 @@ function Set-BitbucketCliVerifiedMarker {
 Write-Host "Syncing Cursor MCP config for repo: $RepoPath"
 Sync-CursorMcpConfig -RepoPath $RepoPath -PrReviewsPath $PSScriptRoot
 Set-BitbucketCliVerifiedMarker
+
+$prConfig = Get-PrReviewConfig -SkillRoot $PSScriptRoot
+Ensure-PrReviewOutputRoot -OutputRoot $prConfig.prOutputLocation
