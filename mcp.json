@@ -1,0 +1,6 @@
+{
+  "mcpServers": {
+    "Atlassian-MCP-Server": {
+  "url": "https://mcp.atlassian.com/v1/mcp"  }
+  }
+}
