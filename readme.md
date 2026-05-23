@@ -2,6 +2,60 @@
 
 Cursor Agent Skill for constraint-driven reviews of team PRs on **Bitbucket Cloud** or **GitHub** (including Enterprise): metadata, diff, and comments via `bb` or `gh`; Jira via Atlassian MCP; C#/.NET checklist; one markdown deliverable under a configurable output root.
 
+## Making the skill available to your agent
+
+Cursor loads skills from folders that contain a **`SKILL.md`** file. Install **this entire repository** (not `SKILL.md` alone)—the agent also needs `setup-pr-review.ps1`, `pr-review.config.json`, and `mcp.json`.
+
+### Choose where to install
+
+| Location | Path (Windows) | Who gets it |
+|----------|----------------|-------------|
+| **Personal** (typical) | `%USERPROFILE%\.cursor\skills\pr-review\` | You, in all projects |
+| **Project** | `<repo>\.cursor\skills\pr-review\` | Anyone who clones that repo |
+
+Do **not** copy into `%USERPROFILE%\.cursor\skills-cursor\`—that directory is for Cursor’s built-in skills only.
+
+### Install steps (personal)
+
+1. Clone or copy this repo (e.g. to `D:\analysis\pr-review-skill`).
+2. Create the skills folder if needed: `%USERPROFILE%\.cursor\skills\`
+3. Place the skill so the layout is:
+
+   ```
+   %USERPROFILE%\.cursor\skills\pr-review\
+   ├── SKILL.md
+   ├── setup-pr-review.ps1
+   ├── pr-review.config.json
+   ├── mcp.json
+   └── readme.md
+   ```
+
+   Either copy the folder to `pr-review`, or clone the repo there, or use a directory junction/symlink from `pr-review` → your clone.
+
+4. Edit **`pr-review.config.json`** (or add **`pr-review.config.local.json`**) for your machine—especially `prOutputLocation` and any `repoPaths`.
+5. **Restart Cursor** or start a **new Agent chat** so skill discovery picks up the new folder.
+
+### Install steps (project)
+
+Same file layout under **`.cursor/skills/pr-review/`** in the repository you share with the team. Commit `SKILL.md`, scripts, and default config; keep secrets and machine paths in **`pr-review.config.local.json`** (gitignored) on each developer machine.
+
+### Confirm the agent can see it
+
+- In **Agent** chat, type **`@`** and look for **pr-review** or **Pull Request Review** in the skill list, or
+- Ask explicitly: *“Review this PR using the pr-review skill: &lt;PR URL&gt;”*
+
+The skill’s YAML **`description`** tells Cursor when to apply it automatically (e.g. when you ask for a PR review and provide a URL). Naming the skill in the prompt avoids ambiguity if several skills match.
+
+### Paths in prompts and setup
+
+`SKILL.md` refers to **“this skill’s directory”**—the folder that contains `SKILL.md`. After install, that is your `pr-review` skills path, for example:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.cursor\skills\pr-review\setup-pr-review.ps1" -RepoPath "D:\projects\your-repo"
+```
+
+If you keep the repo elsewhere, always pass the **full path to `setup-pr-review.ps1`** inside your installed `pr-review` folder.
+
 ## Before you start (recommended)
 
 1. **Clone or locate** the repository on disk.
@@ -89,8 +143,10 @@ You can also paste `Clone path: D:\...\repo` in the chat for one-off reviews.
 With the **target repo folder open in Cursor**, run (adjust paths):
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File "D:\analysis\pr-review-skill\setup-pr-review.ps1" -RepoPath "D:\path\to\that-repo"
+powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.cursor\skills\pr-review\setup-pr-review.ps1" -RepoPath "D:\path\to\that-repo"
 ```
+
+(Use your actual install path if the skill folder is not under `.cursor\skills\pr-review`.)
 
 `-RepoPath` should be the workspace root you opened—not the skill folder.
 
