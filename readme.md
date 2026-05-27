@@ -61,7 +61,8 @@ If you keep the repo elsewhere, always pass the **full path to `setup-pr-review.
 1. **Clone or locate** the repository on disk.
 2. **Open that folder in Cursor** (*File → Open Folder*) so it is the workspace root—or open a PR worktree folder.
 3. Run setup from that context (see [Setup](#setup)).
-4. Start a **new Agent chat** with the **PR URL**.
+4. If setup creates `.cursor/mcp.json`, restart Cursor or your agent editor, then rerun `/pr-review`.
+5. Start a **new Agent chat** with the **PR URL**.
 
 Opening the repo first avoids path guessing when clones live in different directories. The skill uses the workspace first, then config maps, then search roots, then asks you.
 
@@ -69,7 +70,7 @@ Opening the repo first avoids path guessing when clones live in different direct
 
 When invoked with a **PR URL**, the agent:
 
-1. Runs **`setup-pr-review.ps1`** with `-RepoPath` pointing at the opened repo (MCP, CLI markers, output folder).
+1. Runs **`setup-pr-review.ps1`** with `-RepoPath` pointing at the opened repo (MCP, local Git exclude entry, CLI markers, output folder).
 2. **Detects host** — Bitbucket or GitHub (incl. Enterprise via `githubHost`).
 3. Reads **`pr-review.config.json`**.
 4. Gathers **metadata**, **diff**, and **comments** via `bb` or `gh`.
@@ -150,7 +151,9 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.cursor\sk
 
 `-RepoPath` should be the workspace root you opened—not the skill folder.
 
-The script syncs **`mcp.json`**, verifies **`bb`** / **`gh`** when on PATH, and ensures **`prOutputLocation`** exists.
+The script syncs **`mcp.json`**, verifies **`bb`** / **`gh`** when on PATH, and ensures **`prOutputLocation`** exists. When `<repo>\.cursor\mcp.json` exists, it adds `.cursor/mcp.json` to that repo’s **`.git/info/exclude`** instead of editing `.gitignore`, so the local MCP file stays uncommitted without dirtying the shared repo files.
+
+If setup creates `.cursor/mcp.json`, restart Cursor or your agent editor, then rerun `/pr-review`. Cursor loads MCP configuration at startup, so the first run stops there on purpose.
 
 ## Run a review
 
@@ -160,7 +163,13 @@ New Agent chat in the **opened repo workspace**. Example:
 Review this PR using the pr-review skill: https://github.com/owner/repo/pull/42
 ```
 
-Flow: open repo → setup → PR URL → detect host → `bb`/`gh` → resolve clone (usually workspace) → Jira → deliverable.
+Flow: open repo → setup → restart/rerun if MCP was newly created → PR URL → detect host → `bb`/`gh` → resolve clone (usually workspace) → Jira → deliverable.
+
+## Local sync and worktrees
+
+The setup-created `.cursor/mcp.json` is ignored via `.git/info/exclude`, so it should not force a worktree. If the target repo is still dirty because of real local work, the skill uses a timestamped worktree created from the PR base branch, never `--no-checkout`.
+
+If provider checkout fails, for example Bitbucket CLI cannot recognize a non-standard Bitbucket remote URL, the skill keeps the populated worktree and fetches the PR source branch directly with `git fetch origin <source>:refs/heads/<review-branch>`.
 
 ## Review output
 
@@ -175,12 +184,13 @@ Flow: open repo → setup → PR URL → detect host → `bb`/`gh` → resolve c
 |------|--------|
 | **`SKILL.md`** | Full agent workflow |
 | **`pr-review.config.json`** | Output path, clone maps, GitHub host |
-| **`setup-pr-review.ps1`** | MCP sync, CLI markers |
+| **`setup-pr-review.ps1`** | MCP sync, local Git exclude entry, CLI markers |
 | **`mcp.json`** | Atlassian MCP template |
 | **`readme.md`** | This file |
 
 ## Notes
 
 - **`.bb-cli-verified` / `.gh-cli-verified`:** Delete and re-run setup if a CLI breaks.
+- **`.cursor/mcp.json`:** Written into the reviewed repo and ignored through `.git/info/exclude`, not `.gitignore`.
 - **No local tree:** If clone path cannot be resolved, review can still proceed from diff/API only (called out in the write-up).
 - **GHE:** Set `githubHost`; agent uses `GH_HOST` / `gh --hostname`.

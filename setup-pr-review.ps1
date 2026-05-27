@@ -1,4 +1,4 @@
-# Ensures Cursor MCP config is synced into the target repo's .cursor/mcp.json.
+# Syncs Cursor MCP config into the target repo and excludes it via .git/info/exclude.
 # Usage: .\setup-pr-review.ps1 [-RepoPath D:\projects\foo]
 # Or from repo root: .\path\to\setup-pr-review.ps1
 
@@ -68,6 +68,42 @@ function Ensure-PrReviewOutputRoot {
     }
 }
 
+function Add-GitInfoExcludeEntry {
+    param(
+        [string] $RepoPath,
+        [string] $Entry
+    )
+
+    $git = Get-Command git -ErrorAction SilentlyContinue
+    if (-not $git) {
+        Write-Warning "git not on PATH; cannot add $Entry to .git/info/exclude."
+        return
+    }
+
+    $gitDir = (& git -C $RepoPath rev-parse --absolute-git-dir 2>$null)
+    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($gitDir)) {
+        Write-Warning "RepoPath is not a git repository; cannot add $Entry to .git/info/exclude: $RepoPath"
+        return
+    }
+
+    $excludePath = Join-Path $gitDir.Trim() 'info\exclude'
+    $excludeDir = Split-Path $excludePath -Parent
+    if (-not (Test-Path -LiteralPath $excludeDir)) {
+        New-Item -ItemType Directory -Path $excludeDir -Force | Out-Null
+    }
+
+    $excludeContent = Get-Content -LiteralPath $excludePath -Raw -ErrorAction SilentlyContinue
+    $entryExists = $excludeContent -and (($excludeContent -split "`r?`n") -contains $Entry)
+    if ($entryExists) {
+        Write-Host "$Entry already present in .git/info/exclude"
+        return
+    }
+
+    $prefix = if ([string]::IsNullOrWhiteSpace($excludeContent)) { '' } else { "`n" }
+    Add-Content -LiteralPath $excludePath -Value "$prefix# Cursor MCP (local duplicate of global; not committed)`n$Entry"
+    Write-Host "Added $Entry to .git/info/exclude"
+}
+
 $DefaultMcpJson = @'
 {
   "mcpServers": {
@@ -86,7 +122,6 @@ function Sync-CursorMcpConfig {
     $source = Join-Path $PrReviewsPath 'mcp.json'
     $cursorDir = Join-Path $RepoPath '.cursor'
     $target = Join-Path $cursorDir 'mcp.json'
-    $gitignore = Join-Path $RepoPath '.gitignore'
 
     if (Test-Path -LiteralPath $source) {
         $desiredContent = Get-Content -LiteralPath $source -Raw
@@ -115,15 +150,8 @@ function Sync-CursorMcpConfig {
         Write-Host "Wrote mcp.json to $target"
     }
 
-    if ($copy -and -not $targetExisted) {
-        $ignoreEntry = '.cursor/mcp.json'
-        $ignoreContent = Get-Content -LiteralPath $gitignore -Raw -ErrorAction SilentlyContinue
-        $entryMissing = -not $ignoreContent -or ($ignoreContent -notmatch [regex]::Escape($ignoreEntry))
-        if ($entryMissing) {
-            $comment = "`n# Cursor MCP (local duplicate of global; not committed)`n$ignoreEntry`n"
-            Add-Content -LiteralPath $gitignore -Value $comment
-            Write-Host "Added $ignoreEntry to .gitignore"
-        }
+    if (Test-Path -LiteralPath $target) {
+        Add-GitInfoExcludeEntry -RepoPath $RepoPath -Entry '.cursor/mcp.json'
     }
 }
 

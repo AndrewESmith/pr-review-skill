@@ -39,10 +39,11 @@ If **unsupported**, stop and tell the user this skill supports **Bitbucket Cloud
 Use **only** the workflow for the detected provider below. The review checklist, Jira fetch, config, and deliverable template are shared.
 
 ### Configure Jira MCP
-**Run `setup-pr-review.ps1` first** so Cursor MCP servers (e.g. Jira/Atlassian) are available for the repository under review. The script lives in **this skill’s directory** (same folder as `SKILL.md`), next to `setup-pr-review.ps1`. If `mcp.json` is not present beside the script, a built-in Atlassian MCP config is written automatically; an optional `mcp.json` in that folder overrides it.
+**Run `setup-pr-review.ps1` first** so Cursor MCP servers (e.g. Jira/Atlassian) are available for the repository under review. The script lives in **this skill’s directory** (same folder as `SKILL.md`), next to `setup-pr-review.ps1`. If `mcp.json` is not present beside the script, a built-in Atlassian MCP config is written automatically; an optional `mcp.json` in that folder overrides it. When the target repo has `.cursor/mcp.json`, setup adds that path to the repo-local `.git/info/exclude`; it must not edit `.gitignore`.
 
 1. Set **`-RepoPath`** to the **absolute path to the git repository root** for the PR — ideally the folder you already opened in Cursor (see **Open the repository in your editor first**).
-2. Execute from a terminal (PowerShell):
+2. Before setup, check whether `<repo-root>\.cursor\mcp.json` already exists.
+3. Execute from a terminal (PowerShell):
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File "<pr-review-skill-directory>\setup-pr-review.ps1" -RepoPath "<repo-root>"
@@ -55,6 +56,8 @@ Example (script lives next to this skill’s `SKILL.md`):
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.agents\skills\pr-review\setup-pr-review.ps1" -RepoPath "D:\projects\your-repo"
 ```
+
+If `<repo-root>\.cursor\mcp.json` did **not** exist before setup and the script creates it, stop the review and prompt the user: “A new `.cursor/mcp.json` was created for this repository and ignored via `.git/info/exclude`. Please restart Cursor or the agent editor you are using, then rerun `/pr-review`.” Do not fetch PR metadata, diff, comments, or Jira until the user restarts and reruns the skill.
 
 If the script exits successfully and `mcp.json` was already in sync, output may be minimal; still run it so the agent’s environment matches. **Do not skip this step** before fetching PR metadata, diff, comments, or Jira.
 
@@ -185,10 +188,11 @@ Provider **`pr diff`** is sufficient for **what changed**. Use a **local checkou
 
 1. Confirm repo: `git rev-parse --show-toplevel` and that `origin` matches the PR repository id.
 2. `git fetch origin` (and other remotes if the head branch is not on `origin`).
-3. Dirty tree check:
+3. Dirty tree check. Setup-created `.cursor/mcp.json` should be ignored through `.git/info/exclude`, so it should not dirty the repo and `.gitignore` should not change. If the tree is still dirty, treat it as real user or pre-existing work: never revert it, use a worktree, and do **not** use `--no-checkout`.
 
 ```powershell
-$dirty = -not [string]::IsNullOrWhiteSpace((git status --porcelain))
+$status = git status --porcelain
+$dirty = -not [string]::IsNullOrWhiteSpace($status)
 ```
 
 4. If **NOT dirty**, checkout in-place:
@@ -201,22 +205,32 @@ bb pr checkout <number|PR_URL> [-R [HOST/]WORKSPACE/REPO]
 gh pr checkout <number|PR_URL>
 ```
 
-5. If **dirty**, use a **worktree**:
+5. If **dirty**, use a **worktree** created from the PR target/base ref so the worktree has a populated checkout even if provider checkout fails:
 
 ```powershell
 $repoRoot = (git rev-parse --show-toplevel).Trim()
 $prId = "<number>"
+$baseRef = "origin/<target-branch-from-pr-view>" # example: origin/master
 $worktreeRoot = Split-Path $repoRoot -Parent
-$worktreePath = Join-Path $worktreeRoot "_pr-review-$prId"
+$worktreePath = Join-Path $worktreeRoot "_pr-review-$prId-$(Get-Date -Format yyyyMMddHHmmss)"
 
-git worktree add $worktreePath --no-checkout
-Set-Location $worktreePath
 git fetch origin
+git worktree add $worktreePath $baseRef
+Set-Location $worktreePath
 # Bitbucket: bb pr checkout …
 # GitHub: gh pr checkout …
 ```
 
-6. **Fallback** if provider checkout fails: fetch and checkout the **head branch** from `pr view` (`headRefName` on GitHub, source branch on Bitbucket).
+6. **Fallback** if provider checkout fails: fetch and checkout the **head branch** from `pr view` (`headRefName` on GitHub, source branch on Bitbucket). For Bitbucket, if `bb pr checkout` says no git remotes point to a known Bitbucket host, keep the populated worktree and fetch the source branch directly:
+
+```powershell
+$sourceBranch = "<source-branch-from-pr-view>"
+$reviewBranch = "_pr-review-$prId-$(Get-Date -Format yyyyMMddHHmmss)"
+git fetch origin "${sourceBranch}:refs/heads/$reviewBranch"
+git checkout $reviewBranch
+```
+
+If a worktree was accidentally created with `--no-checkout` and checkout/fetch fails, remove that worktree and recreate it from `$baseRef`; do not inspect or report against an empty worktree that appears as a giant delete set.
 
 **After checkout:** Open the checked-out directory in Cursor (in-place clone or `$worktreePath`).
 
