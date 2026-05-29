@@ -129,7 +129,10 @@ Skills cannot store state by themselves. Use marker files next to `SKILL.md`:
 - **PR diff** — unified diff from the provider CLI (`bb pr diff` or `gh pr diff`).
 - **PR metadata** — title, description, source/target branches, reviewers where relevant.
 - **Existing PR comments** — provider comment commands (see provider section) so findings do not duplicate the thread.
-- **Jira key** (e.g., from PR title/branch like `Feature/NV-6901 some-title`).
+- **Jira key** — extract using this priority order:
+  1. PR title: scan for first `[A-Z]+-\d+` match (e.g. `NV-6901`).
+  2. Source branch: split on `/`, then scan each segment for `[A-Z]+-\d+` (e.g. `feature/NV-6659-some-title` → `NV-6659`). Do **not** require the key to be the first segment.
+  3. If not found in either, use `NOJIRA`.
 - **Repo context** (solution, projects) for inspections.
 
 **Workflow order:** (0) Prefer workspace already opened in editor. (1) Run **`setup-pr-review.ps1`** with that repo’s root as `-RepoPath`. (2) **Detect PR host**. (3) **Load configuration**. (4) Gather provider inputs (`bb` or `gh`). (5) **Resolve local clone path** if local sync needed. (6) **Local repository sync** (optional).
@@ -337,7 +340,7 @@ Rules:
 - Do not: second file, `reports/` subfolder, EOF/format nits, generic non-diff advice
 - Re-review: append `## Re-review <yyyy-MM-dd>` unless user says overwrite
 - Before writing: read existing `*.md` in folder; don’t re-raise settled findings
-- If a Jira key is present in the PR title/branch (from `pr view` or URL), **fetch issue** and compare with the implementation (acceptance criteria, status).
+- If a Jira key is found (via **Jira key** extraction in **Required Inputs**), **fetch issue** and compare with the implementation (acceptance criteria, status).
 - If **prior PR comments** are available (Bitbucket: `bb pr view --comments`; GitHub: `gh pr view --comments` and API as needed), synthesize them in **Existing discussion** and avoid duplicating settled points unless you disagree or add evidence.
 - If **no tests changed**, flag a “human review” check to confirm no tests are required.
   
