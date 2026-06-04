@@ -16,6 +16,66 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
+function Escape-ScriptForHtml {
+    param([string]$Content)
+    # HTML parsers close <script> at the first literal </script>, even inside JS strings/regex.
+    return [regex]::Replace($Content, '</(?=script>)', '</scr'' + ''ipt>', 'IgnoreCase')
+}
+
+function Convert-MarkdownToHtmlBody {
+    param(
+        [string]$Markdown,
+        [string]$MarkedJsPath
+    )
+
+    $node = Get-Command node -ErrorAction SilentlyContinue
+    if (-not $node) {
+        throw 'Node.js is required to render review HTML. Install Node or add it to PATH.'
+    }
+
+    $mdFile = [IO.Path]::ChangeExtension([IO.Path]::GetTempFileName(), '.md')
+    $outFile = [IO.Path]::ChangeExtension([IO.Path]::GetTempFileName(), '.html')
+    $helperFile = [IO.Path]::ChangeExtension([IO.Path]::GetTempFileName(), '.js')
+
+    try {
+        [IO.File]::WriteAllText($mdFile, $Markdown, [Text.UTF8Encoding]::new($false))
+
+        $markedPathJs = $MarkedJsPath.Replace('\', '/').Replace("'", "\'")
+        $mdPathJs = $mdFile.Replace('\', '/').Replace("'", "\'")
+        $outPathJs = $outFile.Replace('\', '/').Replace("'", "\'")
+
+        $helper = @"
+const fs = require('fs');
+const vm = require('vm');
+const markedPath = '$markedPathJs';
+const mdPath = '$mdPathJs';
+const outPath = '$outPathJs';
+const ctx = { globalThis: {}, self: null };
+ctx.self = ctx.globalThis;
+vm.runInNewContext(fs.readFileSync(markedPath, 'utf8'), ctx);
+const marked = ctx.globalThis.marked;
+const md = fs.readFileSync(mdPath, 'utf8');
+marked.setOptions({ gfm: true, breaks: true });
+fs.writeFileSync(outPath, marked.parse(md), 'utf8');
+"@
+
+        [IO.File]::WriteAllText($helperFile, $helper, [Text.UTF8Encoding]::new($false))
+        & node $helperFile
+        if ($LASTEXITCODE -ne 0) {
+            throw "Node markdown render failed with exit code $LASTEXITCODE"
+        }
+
+        return [IO.File]::ReadAllText($outFile, [Text.UTF8Encoding]::new($false))
+    }
+    finally {
+        foreach ($path in @($mdFile, $outFile, $helperFile)) {
+            if ($path -and (Test-Path -LiteralPath $path)) {
+                Remove-Item -LiteralPath $path -Force -ErrorAction SilentlyContinue
+            }
+        }
+    }
+}
+
 if (-not $MarkdownPath -and -not $MarkdownContent) {
     throw 'Provide -MarkdownPath or -MarkdownContent.'
 }
@@ -47,6 +107,7 @@ if (-not (Test-Path -LiteralPath $outputDir)) {
 
 $skillRoot = $PSScriptRoot
 $assetsDir = Join-Path $skillRoot 'assets'
+$markedJsPath = Join-Path $assetsDir 'marked.min.js'
 
 foreach ($asset in @('marked.min.js', 'pr-review-page.css', 'pr-review-page.js')) {
     $assetPath = Join-Path $assetsDir $asset
@@ -55,11 +116,12 @@ foreach ($asset in @('marked.min.js', 'pr-review-page.css', 'pr-review-page.js')
     }
 }
 
-$markedJs = Get-Content -LiteralPath (Join-Path $assetsDir 'marked.min.js') -Raw -Encoding UTF8
-$pageCss = Get-Content -LiteralPath (Join-Path $assetsDir 'pr-review-page.css') -Raw -Encoding UTF8
-$pageJs = Get-Content -LiteralPath (Join-Path $assetsDir 'pr-review-page.js') -Raw -Encoding UTF8
+$renderedBody = Convert-MarkdownToHtmlBody -Markdown $MarkdownContent -MarkedJsPath $markedJsPath
 
-# Escape for embedding inside JSON script tag
+$markedJs = Escape-ScriptForHtml (Get-Content -LiteralPath $markedJsPath -Raw -Encoding UTF8)
+$pageCss = Get-Content -LiteralPath (Join-Path $assetsDir 'pr-review-page.css') -Raw -Encoding UTF8
+$pageJs = Escape-ScriptForHtml (Get-Content -LiteralPath (Join-Path $assetsDir 'pr-review-page.js') -Raw -Encoding UTF8)
+
 $markdownJson = ($MarkdownContent | ConvertTo-Json -Compress)
 $commentsJson = '[]'
 
@@ -98,7 +160,7 @@ $pageCss
   </div>
   <div class="layout">
     <div class="main">
-      <div id="review-content"></div>
+      <div id="review-content" data-prerendered="true">$renderedBody</div>
     </div>
     <aside class="sidebar">
       <div class="sidebar-header">

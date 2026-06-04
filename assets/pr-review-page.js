@@ -112,12 +112,34 @@
   }
 
   function renderMarkdown() {
-    var md = loadMarkdown();
     var container = document.getElementById("review-content");
-    if (!container || !window.marked) return;
+    if (!container) return;
 
-    marked.setOptions({ gfm: true, breaks: true });
-    container.innerHTML = marked.parse(md);
+    if (container.getAttribute("data-prerendered") === "true" || container.innerHTML.trim()) {
+      enhanceFindings(container);
+      enhanceVerdict(container);
+      return;
+    }
+
+    var md = loadMarkdown();
+    if (!md) {
+      container.innerHTML = '<p class="empty-comments">Review content failed to load.</p>';
+      return;
+    }
+
+    if (!window.marked) {
+      container.innerHTML = '<p class="empty-comments">Markdown renderer unavailable — regenerate with Write-PrReviewHtml.ps1.</p>';
+      return;
+    }
+
+    if (typeof marked.setOptions === "function") {
+      marked.setOptions({ gfm: true, breaks: true });
+    } else if (typeof marked.use === "function") {
+      marked.use({ gfm: true, breaks: true });
+    }
+
+    var html = typeof marked.parse === "function" ? marked.parse(md) : marked(md);
+    container.innerHTML = html;
 
     enhanceFindings(container);
     enhanceVerdict(container);
@@ -273,7 +295,7 @@
     var content = document.getElementById("review-content");
     if (!content) return;
 
-    content.addEventListener("mouseup", function (e) {
+    content.addEventListener("mouseup", function () {
       setTimeout(function () {
         var sel = window.getSelection();
         if (!sel || sel.isCollapsed || !sel.toString().trim()) {
@@ -310,15 +332,21 @@
 
     var mdJson = JSON.stringify(loadMarkdown());
     var commentsJson = JSON.stringify(comments, null, 2);
+    var endScript = "<" + "/script>";
+    var openSource = "<" + 'script type="application/json" id="review-source">';
+    var openComments = "<" + 'script type="application/json" id="review-comments">';
+
+    var sourceRe = new RegExp('<script type="application/json" id="review-source">[\\s\\S]*?' + endScript.replace(/\//g, "\\/"));
+    var commentsRe = new RegExp('<script type="application/json" id="review-comments">[\\s\\S]*?' + endScript.replace(/\//g, "\\/"));
 
     template = template.replace(
-      /<script type="application\/json" id="review-source">[\s\S]*?<\/script>/,
-      '<script type="application/json" id="review-source">' + mdJson.replace(/<\//g, "<\\/") + "</script>"
+      sourceRe,
+      openSource + mdJson.replace(/<\//g, "<\\/") + endScript
     );
 
     template = template.replace(
-      /<script type="application\/json" id="review-comments">[\s\S]*?<\/script>/,
-      '<script type="application/json" id="review-comments">' + commentsJson.replace(/<\//g, "<\\/") + "</script>"
+      commentsRe,
+      openComments + commentsJson.replace(/<\//g, "<\\/") + endScript
     );
 
     return "<!DOCTYPE html>\n" + template;

@@ -354,7 +354,9 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "<skill-dir>\Write-PrReviewH
 '@
 ```
 
-Alternatively pass `-MarkdownPath` if content was written to a temp file. The script writes a self-contained HTML page and opens it in the default browser (use `-NoOpen` to skip). Do **not** write a `.md` deliverable.
+Alternatively pass `-MarkdownPath` if content was written to a temp file. The script writes a self-contained HTML page and opens it in the default browser (use `-NoOpen` to skip).
+
+**Do not** write a `.md` deliverable to `prOutputLocation`. Compose markdown in memory (or a temp file outside the output folder that you delete after running the script). The HTML file is the only output artifact.
 
 ### Template
 

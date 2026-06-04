@@ -141,6 +141,7 @@ You can also paste `Clone path: D:\...\repo` in the chat for one-off reviews.
 | **PR URL** | Always |
 | **`bb`** + auth | Bitbucket PRs |
 | **`gh`** + auth | GitHub PRs |
+| **Node.js** | Renders markdown to HTML in `Write-PrReviewHtml.ps1` |
 | **PowerShell** | Setup and HTML generator scripts |
 | **Default browser** | Opens the review HTML (automatic via script) |
 
