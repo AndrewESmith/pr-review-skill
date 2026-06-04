@@ -1,6 +1,6 @@
 # Pull Request Review (C#/.NET)
 
-Cursor Agent Skill for constraint-driven reviews of team PRs on **Bitbucket Cloud** or **GitHub** (including Enterprise): metadata, diff, and comments via `bb` or `gh`; Jira via Atlassian MCP; C#/.NET checklist; one markdown deliverable under a configurable output root.
+Cursor Agent Skill for constraint-driven reviews of team PRs on **Bitbucket Cloud** or **GitHub** (including Enterprise): metadata, diff, and comments via `bb` or `gh`; Jira via Atlassian MCP; C#/.NET checklist; one self-contained HTML deliverable under a configurable output root.
 
 ## Making the skill available to your agent
 
@@ -25,6 +25,11 @@ Do **not** copy into `%USERPROFILE%\.cursor\skills-cursor\`—that directory is 
    %USERPROFILE%\.cursor\skills\pr-review\
    ├── SKILL.md
    ├── setup-pr-review.ps1
+   ├── Write-PrReviewHtml.ps1
+   ├── assets/
+   │   ├── marked.min.js
+   │   ├── pr-review-page.css
+   │   └── pr-review-page.js
    ├── pr-review.config.json
    ├── mcp.json
    └── readme.md
@@ -75,7 +80,7 @@ When invoked with a **PR URL**, the agent:
 3. Reads **`pr-review.config.json`**.
 4. Gathers **metadata**, **diff**, and **comments** via `bb` or `gh`.
 5. **Resolves clone path** (workspace → `repoPaths` → `reposRoots` search → ask) if local sync is needed.
-6. Fetches **Jira**, runs the checklist, writes one review under `prOutputLocation`, opens it in Cursor.
+6. Fetches **Jira**, runs the checklist, generates one HTML review via **`Write-PrReviewHtml.ps1`**, opens it in your default browser.
 
 Summary/Verdict use caveman voice; Findings stay normal technical English.
 
@@ -98,7 +103,7 @@ JSON in **this skill directory** (agent reads at runtime):
 
 | Key | Purpose |
 |-----|---------|
-| **`prOutputLocation`** | Where review `.md` files are written |
+| **`prOutputLocation`** | Where review `.html` files are written |
 | **`repoPaths`** | Map `workspace/repo` or `owner/repo` → absolute clone path (scattered clones) |
 | **`reposRoots`** | Array of parent dirs to search for `<repo-slug>` folders (default `["D:\\projects"]`) |
 | **`githubHost`** | `github.com` or GHE hostname |
@@ -136,8 +141,9 @@ You can also paste `Clone path: D:\...\repo` in the chat for one-off reviews.
 | **PR URL** | Always |
 | **`bb`** + auth | Bitbucket PRs |
 | **`gh`** + auth | GitHub PRs |
-| **PowerShell** | Setup script |
-| **`cursor` on PATH** | Open output `.md` |
+| **Node.js** | Renders markdown to HTML in `Write-PrReviewHtml.ps1` |
+| **PowerShell** | Setup and HTML generator scripts |
+| **Default browser** | Opens the review HTML (automatic via script) |
 
 ## Setup
 
@@ -173,16 +179,30 @@ If provider checkout fails, for example Bitbucket CLI cannot recognize a non-sta
 
 ## Review output
 
-`<prOutputLocation>\<sanitized-source-branch>\<JIRA-KEY>_<slug>_<yyyyMMdd_HHmm>.md`
+`<prOutputLocation>\<sanitized-source-branch>\<JIRA-KEY>_<slug>_<yyyyMMdd_HHmm>.html`
 
-- No Jira key: `NOJIRA_<slug>_<timestamp>.md`
-- Re-review: appends `## Re-review <date>` unless you request overwrite
+- No Jira key: `NOJIRA_<slug>_<timestamp>.html`
+- Re-review: append `## Re-review <date>` to markdown content before calling `Write-PrReviewHtml.ps1` unless you request overwrite
+- Prior reviews: agent reads existing `*.html` in the folder and extracts embedded markdown from `#review-source` to avoid re-raising settled findings
+
+### Commenting on reviews
+
+The HTML page is self-contained (no CDN). In the browser:
+
+1. **Select text** in the review body → click **Add comment**
+2. Edit your note in the **Comments** sidebar
+3. **Copy all** (or copy individual comments) — formatted for pasting into Bitbucket/GitHub review threads
+4. **Save** — embeds comments in the HTML file (use the save dialog or download and replace the original)
+
+Comments travel with the file when shared.
 
 ## Files in this repo
 
 | File | Purpose |
 |------|--------|
 | **`SKILL.md`** | Full agent workflow |
+| **`Write-PrReviewHtml.ps1`** | Generates self-contained HTML from review markdown |
+| **`assets/`** | Vendored marked.js, page CSS/JS (inlined into output) |
 | **`pr-review.config.json`** | Output path, clone maps, GitHub host |
 | **`setup-pr-review.ps1`** | MCP sync, local Git exclude entry, CLI markers |
 | **`mcp.json`** | Atlassian MCP template |

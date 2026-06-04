@@ -73,7 +73,7 @@ You only need the marker for the provider you are reviewing; setup tries both wh
 Skills have no built-in settings UI; read **`pr-review.config.json`** in **this skill’s directory** (same folder as `SKILL.md`).
 
 1. If **`pr-review.config.local.json`** exists beside it, read that file **after** the base config; any property in the local file **overrides** the base file (use for machine-specific paths without committing them).
-2. Use **`prOutputLocation`** as `<pr-output-location>` — an **absolute** directory path where review markdown files are written. Default if missing or unreadable: `D:\analysis\pr_reviews`.
+2. Use **`prOutputLocation`** as `<pr-output-location>` — an **absolute** directory path where review HTML files are written. Default if missing or unreadable: `D:\analysis\pr_reviews`.
 3. Use **`repoPaths`** — optional map of **repository id → absolute clone path** for repos that are not under a common parent (see **Resolve local clone path**). Keys:
    - Bitbucket: `workspace/repo-slug` (from PR URL or `bb pr view`)
    - GitHub: `owner/repo` (from PR URL or `gh pr view`)
@@ -325,9 +325,9 @@ git worktree remove $worktreePath
 
 ## Deliverable
 
-Write **exactly one** file:
+Generate **exactly one** HTML file via **`Write-PrReviewHtml.ps1`** (same folder as `SKILL.md`):
 
-`<pr-output-location>\<sanitized-source-branch>\<JIRA-KEY>_<slug>_<yyyyMMdd_HHmm>.md`
+`<pr-output-location>\<sanitized-source-branch>\<JIRA-KEY>_<slug>_<yyyyMMdd_HHmm>.html`
 
 `<pr-output-location>` is **`prOutputLocation`** from **Load configuration** (not a literal folder name).
 
@@ -335,16 +335,28 @@ Rules:
 
 - `<sanitized-source-branch>`: source branch, `/` → `-`
 - `<slug>`: ≤50 chars from PR/Jira title
-- No Jira key: `NOJIRA_<slug>_<yyyyMMdd_HHmm>.md`
+- No Jira key: `NOJIRA_<slug>_<yyyyMMdd_HHmm>.html`
 - Required sections: Template below; **Verdict** mandatory
 - Do not: second file, `reports/` subfolder, EOF/format nits, generic non-diff advice
-- Re-review: append `## Re-review <yyyy-MM-dd>` unless user says overwrite
-- Before writing: read existing `*.md` in folder; don’t re-raise settled findings
+- Re-review: append `## Re-review <yyyy-MM-dd>` to markdown content before calling the script (unless user says overwrite)
+- Before writing: read existing `*.html` in folder; extract embedded markdown from `<script type="application/json" id="review-source">` in prior reviews; don’t re-raise settled findings
 - If a Jira key is found (via **Jira key** extraction in **Required Inputs**), **fetch issue** and compare with the implementation (acceptance criteria, status).
 - If **prior PR comments** are available (Bitbucket: `bb pr view --comments`; GitHub: `gh pr view --comments` and API as needed), synthesize them in **Existing discussion** and avoid duplicating settled points unless you disagree or add evidence.
 - If **no tests changed**, flag a “human review” check to confirm no tests are required.
-  
-After write: open in Cursor (`cursor "<path>"`).
+
+**Workflow:** Compose review content per the Template below (markdown), then run:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File "<skill-dir>\Write-PrReviewHtml.ps1" `
+  -OutputPath "<full-path-to-.html>" `
+  -MarkdownContent @'
+...markdown body per Template...
+'@
+```
+
+Alternatively pass `-MarkdownPath` if content was written to a temp file. The script writes a self-contained HTML page and opens it in the default browser (use `-NoOpen` to skip).
+
+**Do not** write a `.md` deliverable to `prOutputLocation`. Compose markdown in memory (or a temp file outside the output folder that you delete after running the script). The HTML file is the only output artifact.
 
 ### Template
 
