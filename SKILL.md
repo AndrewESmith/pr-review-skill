@@ -68,6 +68,30 @@ On setup, `setup-pr-review.ps1` may create machine-local markers next to `SKILL.
 
 You only need the marker for the provider you are reviewing; setup tries both when CLIs are on `PATH`.
 
+### Verify Atlassian MCP authorization
+
+`setup-pr-review.ps1` only writes `.cursor/mcp.json`; it **cannot** confirm OAuth/API-token auth. After setup completes — and **after** any Cursor restart required for a **newly created** `mcp.json` — verify Jira access **before** fetching PR metadata or Jira issues.
+
+1. Call MCP tool **`getAccessibleAtlassianResources`** on server **`Atlassian-MCP-Server`** (no arguments). Optionally confirm identity with **`atlassianUserInfo`**.
+2. Treat as **authorized** when the call succeeds and at least one returned site includes **`read:jira-work`** in `scopes` (note the site `url` / `id` as `cloudId` for later Jira calls).
+3. Treat as **not authorized** when the call errors, returns empty, the Atlassian server is missing from MCP, or no resource has Jira scopes.
+
+**When not authorized**, stop and prompt the user (do not fetch Jira yet):
+
+> Atlassian MCP is not authorized for Jira. In Cursor: **Settings → MCP → Atlassian-MCP-Server** → **Connect** / **Authorize** and complete the browser OAuth flow for your Jira site (e.g. `smokeball.atlassian.net`). If your org uses API-token auth instead, add the `Authorization` header to the skill’s `mcp.json` and re-run setup. Reply **done** when authorization is complete.
+
+Then **retry** `getAccessibleAtlassianResources`. You may retry up to **two** times after the user confirms.
+
+**Continue vs re-run the skill:**
+
+| Situation | Action |
+|-----------|--------|
+| **New** `.cursor/mcp.json` was just created | **Stop.** User must **restart Cursor**, then **re-run** the skill (MCP config loads at startup). |
+| **OAuth not yet granted** (MCP already loaded) | **Stay in this invocation.** User authorizes in Settings → MCP; you retry the probe when they reply **done**. No restart or skill re-run needed. |
+| **Auth probe still fails** after retries | **Continue** the review without Jira: use PR title/description for alignment and set `*fetch failed: Atlassian MCP not authorized*` on the Jira line. |
+
+Do **not** cache auth in a marker file — OAuth tokens can expire; probe at the start of every review.
+
 ### Load configuration
 
 Skills have no built-in settings UI; read **`pr-review.config.json`** in **this skill’s directory** (same folder as `SKILL.md`).
@@ -135,7 +159,7 @@ Skills cannot store state by themselves. Use marker files next to `SKILL.md`:
   3. If not found in either, use `NOJIRA`.
 - **Repo context** (solution, projects) for inspections.
 
-**Workflow order:** (0) Prefer workspace already opened in editor. (1) Run **`setup-pr-review.ps1`** with that repo’s root as `-RepoPath`. (2) **Detect PR host**. (3) **Load configuration**. (4) Gather provider inputs (`bb` or `gh`). (5) **Resolve local clone path** if local sync needed. (6) **Local repository sync** (optional).
+**Workflow order:** (0) Prefer workspace already opened in editor. (1) Run **`setup-pr-review.ps1`** with that repo’s root as `-RepoPath`. (1b) If setup created a new `.cursor/mcp.json`, stop for Cursor restart + skill re-run; otherwise **verify Atlassian MCP authorization** (see above). (2) **Detect PR host**. (3) **Load configuration**. (4) Gather provider inputs (`bb` or `gh`). (5) **Resolve local clone path** if local sync needed. (6) **Local repository sync** (optional).
 
 ## Resolve local clone path
 

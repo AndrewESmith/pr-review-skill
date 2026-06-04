@@ -122,6 +122,7 @@ function Sync-CursorMcpConfig {
     $source = Join-Path $PrReviewsPath 'mcp.json'
     $cursorDir = Join-Path $RepoPath '.cursor'
     $target = Join-Path $cursorDir 'mcp.json'
+    $newlyCreated = $false
 
     if (Test-Path -LiteralPath $source) {
         $desiredContent = Get-Content -LiteralPath $source -Raw
@@ -148,11 +149,16 @@ function Sync-CursorMcpConfig {
         }
         Set-Content -LiteralPath $target -Value $desiredContent -Encoding utf8 -NoNewline
         Write-Host "Wrote mcp.json to $target"
+        if (-not $targetExisted) {
+            $newlyCreated = $true
+        }
     }
 
     if (Test-Path -LiteralPath $target) {
         Add-GitInfoExcludeEntry -RepoPath $RepoPath -Entry '.cursor/mcp.json'
     }
+
+    return $newlyCreated
 }
 
 function Set-BitbucketCliVerifiedMarker {
@@ -204,9 +210,17 @@ function Set-GitHubCliVerifiedMarker {
 }
 
 Write-Host "Syncing Cursor MCP config for repo: $RepoPath"
-Sync-CursorMcpConfig -RepoPath $RepoPath -PrReviewsPath $PSScriptRoot
+$mcpCreated = Sync-CursorMcpConfig -RepoPath $RepoPath -PrReviewsPath $PSScriptRoot
 Set-BitbucketCliVerifiedMarker
 Set-GitHubCliVerifiedMarker
 
 $prConfig = Get-PrReviewConfig -SkillRoot $PSScriptRoot
 Ensure-PrReviewOutputRoot -OutputRoot $prConfig.prOutputLocation
+
+if ($mcpCreated) {
+    Write-Host ""
+    Write-Host "Next: restart Cursor (new .cursor/mcp.json), then re-run the pr-review skill."
+} else {
+    Write-Host ""
+    Write-Host "Next: agent verifies Atlassian MCP auth (getAccessibleAtlassianResources) before fetching Jira."
+}
