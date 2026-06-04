@@ -54,7 +54,7 @@ If you use a `git worktree` for the PR, set `-RepoPath` to the **worktree direct
 Example (script lives next to this skill’s `SKILL.md`):
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.agents\skills\pr-review\setup-pr-review.ps1" -RepoPath "D:\projects\your-repo"
+powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.cursor\skills\pr-review\setup-pr-review.ps1" -RepoPath "D:\projects\your-repo"
 ```
 
 If `<repo-root>\.cursor\mcp.json` did **not** exist before setup and the script creates it, stop the review and prompt the user: “A new `.cursor/mcp.json` was created for this repository and ignored via `.git/info/exclude`. Please restart Cursor or the agent editor you are using, then rerun `/pr-review`.” Do not fetch PR metadata, diff, comments, or Jira until the user restarts and reruns the skill.

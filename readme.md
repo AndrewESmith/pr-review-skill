@@ -4,7 +4,7 @@ Cursor Agent Skill for constraint-driven reviews of team PRs on **Bitbucket Clou
 
 ## Making the skill available to your agent
 
-Cursor loads skills from folders that contain a **`SKILL.md`** file. Install **this entire repository** (not `SKILL.md` alone)—the agent also needs `setup-pr-review.ps1`, `pr-review.config.json`, and `mcp.json`.
+Cursor loads skills from folders that contain a **`SKILL.md`** file. Install **this entire repository** (not `SKILL.md` alone)—the agent also needs `setup-pr-review.ps1`, `Write-PrReviewHtml.ps1`, `assets/`, `pr-review.config.json`, and `mcp.json`.
 
 ### Choose where to install
 
@@ -15,34 +15,78 @@ Cursor loads skills from folders that contain a **`SKILL.md`** file. Install **t
 
 Do **not** copy into `%USERPROFILE%\.cursor\skills-cursor\`—that directory is for Cursor’s built-in skills only.
 
-### Install steps (personal)
+### Install with `Install-PrReviewSkill.ps1` (recommended)
 
-1. Clone or copy this repo (e.g. to `D:\analysis\pr-review-skill`).
-2. Create the skills folder if needed: `%USERPROFILE%\.cursor\skills\`
-3. Place the skill so the layout is:
+Run from a clone of this repo (adjust paths). Default target: `%USERPROFILE%\.cursor\skills\pr-review`.
 
-   ```
-   %USERPROFILE%\.cursor\skills\pr-review\
-   ├── SKILL.md
-   ├── setup-pr-review.ps1
-   ├── Write-PrReviewHtml.ps1
-   ├── assets/
-   │   ├── marked.min.js
-   │   ├── pr-review-page.css
-   │   └── pr-review-page.js
-   ├── pr-review.config.json
-   ├── mcp.json
-   └── readme.md
-   ```
+| Mode | Who | What it does | Update after `git pull` in your dev clone |
+|------|-----|--------------|---------------------------------------------|
+| **`Link`** | Skill maintainers (Windows dev) | Directory junction / symlink: skills folder → your clone | Automatic (same files) |
+| **`Clone`** | Teammates | `git clone` into the skills folder | `.\Install-PrReviewSkill.ps1 -Mode Clone` (runs `git pull`) |
+| **`Copy`** | Teammates without git in skills dir | Copies tree; never overwrites `pr-review.config.local.json` | `.\Install-PrReviewSkill.ps1 -Mode Copy -Force` from your updated clone |
 
-   Either copy the folder to `pr-review`, or clone the repo there, or use a directory junction/symlink from `pr-review` → your clone.
+**Maintainer (junction to dev clone):**
 
-4. Edit **`pr-review.config.json`** (or add **`pr-review.config.local.json`**) for your machine—especially `prOutputLocation` and any `repoPaths`.
-5. **Restart Cursor** or start a **new Agent chat** so skill discovery picks up the new folder.
+```powershell
+cd D:\analysis\pr-review-skill
+powershell -NoProfile -ExecutionPolicy Bypass -File .\Install-PrReviewSkill.ps1 -Mode Link
+```
+
+**Teammate (clone into skills — easiest):**
+
+```powershell
+git clone https://github.com/AndrewESmith/pr-review-skill.git $env:USERPROFILE\tools\pr-review-skill
+cd $env:USERPROFILE\tools\pr-review-skill
+powershell -NoProfile -ExecutionPolicy Bypass -File .\Install-PrReviewSkill.ps1 -Mode Clone
+```
+
+**Teammate (copy snapshot from a clone):**
+
+```powershell
+cd $env:USERPROFILE\tools\pr-review-skill   # any clone of this repo
+powershell -NoProfile -ExecutionPolicy Bypass -File .\Install-PrReviewSkill.ps1 -Mode Copy
+# later, refresh:
+powershell -NoProfile -ExecutionPolicy Bypass -File .\Install-PrReviewSkill.ps1 -Mode Copy -Force
+```
+
+Parameters:
+
+| Parameter | Default | Purpose |
+|-----------|---------|---------|
+| **`-Mode`** | `Copy` | `Link`, `Clone`, or `Copy` |
+| **`-Source`** | Script directory | Source tree for `Link` / `Copy` |
+| **`-Target`** | `%USERPROFILE%\.cursor\skills\pr-review` | Cursor skills install path |
+| **`-RepositoryUrl`** | This GitHub repo | Used by `-Mode Clone` |
+| **`-Force`** | off | Replace junction/copy; `Clone` + existing `.git` runs `git pull` instead of deleting |
+
+On first install, if `pr-review.config.local.json` is missing, the script creates it from **`pr-review.config.local.json.example`**. Edit that file for your machine paths.
+
+**After any install:** start a **new Agent chat** (or restart Cursor) so the skill is discovered.
+
+**Junction safety:** If you replace a `Link` install, the script uses `rmdir` on the junction path only — it does not delete your dev clone.
+
+### Manual install (without the script)
+
+Same layout under `%USERPROFILE%\.cursor\skills\pr-review\`:
+
+```
+%USERPROFILE%\.cursor\skills\pr-review\
+├── SKILL.md
+├── Install-PrReviewSkill.ps1
+├── setup-pr-review.ps1
+├── Write-PrReviewHtml.ps1
+├── assets/
+├── pr-review.config.json
+├── pr-review.config.local.json   ← per machine (gitignored)
+├── mcp.json
+└── readme.md
+```
+
+Copy, clone, or junction that folder as described above.
 
 ### Install steps (project)
 
-Same file layout under **`.cursor/skills/pr-review/`** in the repository you share with the team. Commit `SKILL.md`, scripts, and default config; keep secrets and machine paths in **`pr-review.config.local.json`** (gitignored) on each developer machine.
+Same file layout under **`.cursor/skills/pr-review/`** in the repository you share with the team. Commit `SKILL.md`, scripts, and default config; keep machine paths in **`pr-review.config.local.json`** (gitignored) on each developer machine.
 
 ### Confirm the agent can see it
 
@@ -206,7 +250,9 @@ Comments travel with the file when shared.
 | **`Write-PrReviewHtml.ps1`** | Generates self-contained HTML from review markdown |
 | **`assets/`** | Vendored marked.js, page CSS/JS (inlined into output) |
 | **`pr-review.config.json`** | Output path, clone maps, GitHub host |
-| **`setup-pr-review.ps1`** | MCP sync, local Git exclude entry, CLI markers |
+| **`Install-PrReviewSkill.ps1`** | Install skill into `%USERPROFILE%\.cursor\skills\pr-review` (Link / Clone / Copy) |
+| **`setup-pr-review.ps1`** | MCP sync, local Git exclude entry, CLI markers (run per repo under review) |
+| **`pr-review.config.local.json.example`** | Template for per-machine config |
 | **`mcp.json`** | Atlassian MCP template |
 | **`readme.md`** | This file |
 

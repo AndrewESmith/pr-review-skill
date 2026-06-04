@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `Install-PrReviewSkill.ps1` with `-Mode Link`, `Clone`, or `Copy` for personal Cursor skills install.
+- `pr-review.config.local.json.example` for first-time per-machine configuration.
+
+### Changed
+
+- `readme.md` documents install modes for maintainers vs teammates; fixes `SKILL.md` setup path to `.cursor\skills`.
+
 ## [0.3.0] - 2026-06-05
 
 ### Added
