@@ -161,6 +161,8 @@ The script syncs **`mcp.json`**, verifies **`bb`** / **`gh`** when on PATH, and 
 
 If setup creates `.cursor/mcp.json`, restart Cursor or your agent editor, then rerun `/pr-review`. Cursor loads MCP configuration at startup, so the first run stops there on purpose.
 
+After MCP is loaded, the agent probes Jira access via **`getAccessibleAtlassianResources`**. If OAuth is not granted, it asks you to authorize under **Settings → MCP → Atlassian-MCP-Server**; you can reply **done** and the **same** chat continues — no second skill invocation unless MCP config was newly created.
+
 ## Run a review
 
 New Agent chat in the **opened repo workspace**. Example:
