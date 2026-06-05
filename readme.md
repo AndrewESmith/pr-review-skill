@@ -28,7 +28,7 @@ Run from a clone of this repo (adjust paths). Default target: `%USERPROFILE%\.cu
 **Maintainer (junction to dev clone):**
 
 ```powershell
-cd D:\analysis\pr-review-skill
+Open repository location in powershell terminal eg: cd D:\analysis\pr-review-skill
 powershell -NoProfile -ExecutionPolicy Bypass -File .\Install-PrReviewSkill.ps1 -Mode Link
 ```
 
