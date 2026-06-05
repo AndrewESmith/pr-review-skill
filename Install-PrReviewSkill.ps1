@@ -1,4 +1,4 @@
-# Installs the pr-review Cursor skill into %USERPROFILE%\.cursor\skills\pr-review
+# Installs the pr-review agent skill into %USERPROFILE%\.agents\skills\pr-review
 # Usage (from this repo):
 #   .\Install-PrReviewSkill.ps1 -Mode Link
 #   .\Install-PrReviewSkill.ps1 -Mode Clone
@@ -12,7 +12,7 @@ param(
 
     [string] $Source,
 
-    [string] $Target = (Join-Path $env:USERPROFILE '.cursor\skills\pr-review'),
+    [string] $Target = (Join-Path $env:USERPROFILE '.agents\skills\pr-review'),
 
     [string] $RepositoryUrl = 'https://github.com/AndrewESmith/pr-review-skill.git',
 

@@ -1,23 +1,23 @@
 # Pull Request Review (C#/.NET)
 
-Cursor Agent Skill for constraint-driven reviews of team PRs on **Bitbucket Cloud** or **GitHub** (including Enterprise): metadata, diff, and comments via `bb` or `gh`; Jira via Atlassian MCP; C#/.NET checklist; one self-contained HTML deliverable under a configurable output root.
+Agent Agent Skill for constraint-driven reviews of team PRs on **Bitbucket Cloud** or **GitHub** (including Enterprise): metadata, diff, and comments via `bb` or `gh`; Jira via Atlassian MCP; C#/.NET checklist; one self-contained HTML deliverable under a configurable output root.
 
 ## Making the skill available to your agent
 
-Cursor loads skills from folders that contain a **`SKILL.md`** file. Install **this entire repository** (not `SKILL.md` alone)—the agent also needs `setup-pr-review.ps1`, `Write-PrReviewHtml.ps1`, `assets/`, `pr-review.config.json`, and `mcp.json`.
+Agent loads skills from folders that contain a **`SKILL.md`** file. Install **this entire repository** (not `SKILL.md` alone)—the agent also needs `setup-pr-review.ps1`, `Write-PrReviewHtml.ps1`, `assets/`, `pr-review.config.json`, and `mcp.json`.
 
 ### Choose where to install
 
 | Location | Path (Windows) | Who gets it |
 |----------|----------------|-------------|
-| **Personal** (typical) | `%USERPROFILE%\.cursor\skills\pr-review\` | You, in all projects |
-| **Project** | `<repo>\.cursor\skills\pr-review\` | Anyone who clones that repo |
+| **Personal** (typical) | `%USERPROFILE%\.agents\skills\pr-review\` | You, in all projects |
+| **Project** | `<repo>\.agents\skills\pr-review\` | Anyone who clones that repo |
 
-Do **not** copy into `%USERPROFILE%\.cursor\skills-cursor\`—that directory is for Cursor’s built-in skills only.
+Do **not** copy into `%USERPROFILE%\.agents\skills-cursor\`—that directory is for Cursor’s built-in skills only.
 
 ### Install with `Install-PrReviewSkill.ps1` (recommended)
 
-Run from a clone of this repo (adjust paths). Default target: `%USERPROFILE%\.cursor\skills\pr-review`.
+Run from a clone of this repo (adjust paths). Default target: `%USERPROFILE%\.agents\skills\pr-review`.
 
 | Mode | Who | What it does | Update after `git pull` in your dev clone |
 |------|-----|--------------|---------------------------------------------|
@@ -55,7 +55,7 @@ Parameters:
 |-----------|---------|---------|
 | **`-Mode`** | `Copy` | `Link`, `Clone`, or `Copy` |
 | **`-Source`** | Script directory | Source tree for `Link` / `Copy` |
-| **`-Target`** | `%USERPROFILE%\.cursor\skills\pr-review` | Cursor skills install path |
+| **`-Target`** | `%USERPROFILE%\.agents\skills\pr-review` | Agent skills install path |
 | **`-RepositoryUrl`** | This GitHub repo | Used by `-Mode Clone` |
 | **`-Force`** | off | Replace junction/copy; `Clone` + existing `.git` runs `git pull` instead of deleting |
 
@@ -67,10 +67,10 @@ On first install, if `pr-review.config.local.json` is missing, the script create
 
 ### Manual install (without the script)
 
-Same layout under `%USERPROFILE%\.cursor\skills\pr-review\`:
+Same layout under `%USERPROFILE%\.agents\skills\pr-review\`:
 
 ```
-%USERPROFILE%\.cursor\skills\pr-review\
+%USERPROFILE%\.agents\skills\pr-review\
 ├── SKILL.md
 ├── Install-PrReviewSkill.ps1
 ├── setup-pr-review.ps1
@@ -86,7 +86,7 @@ Copy, clone, or junction that folder as described above.
 
 ### Install steps (project)
 
-Same file layout under **`.cursor/skills/pr-review/`** in the repository you share with the team. Commit `SKILL.md`, scripts, and default config; keep machine paths in **`pr-review.config.local.json`** (gitignored) on each developer machine.
+Same file layout under **`.agents/skills/pr-review/`** in the repository you share with the team. Commit `SKILL.md`, scripts, and default config; keep machine paths in **`pr-review.config.local.json`** (gitignored) on each developer machine.
 
 ### Confirm the agent can see it
 
@@ -100,7 +100,7 @@ The skill’s YAML **`description`** tells Cursor when to apply it automatically
 `SKILL.md` refers to **“this skill’s directory”**—the folder that contains `SKILL.md`. After install, that is your `pr-review` skills path, for example:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.cursor\skills\pr-review\setup-pr-review.ps1" -RepoPath "D:\projects\your-repo"
+powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.agents\skills\pr-review\setup-pr-review.ps1" -RepoPath "D:\projects\your-repo"
 ```
 
 If you keep the repo elsewhere, always pass the **full path to `setup-pr-review.ps1`** inside your installed `pr-review` folder.
@@ -194,10 +194,10 @@ You can also paste `Clone path: D:\...\repo` in the chat for one-off reviews.
 With the **target repo folder open in Cursor**, run (adjust paths):
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.cursor\skills\pr-review\setup-pr-review.ps1" -RepoPath "D:\path\to\that-repo"
+powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.agents\skills\pr-review\setup-pr-review.ps1" -RepoPath "D:\path\to\that-repo"
 ```
 
-(Use your actual install path if the skill folder is not under `.cursor\skills\pr-review`.)
+(Use your actual install path if the skill folder is not under `.agents\skills\pr-review`.)
 
 `-RepoPath` should be the workspace root you opened—not the skill folder.
 
@@ -250,7 +250,7 @@ Comments travel with the file when shared.
 | **`Write-PrReviewHtml.ps1`** | Generates self-contained HTML from review markdown |
 | **`assets/`** | Vendored marked.js, page CSS/JS (inlined into output) |
 | **`pr-review.config.json`** | Output path, clone maps, GitHub host |
-| **`Install-PrReviewSkill.ps1`** | Install skill into `%USERPROFILE%\.cursor\skills\pr-review` (Link / Clone / Copy) |
+| **`Install-PrReviewSkill.ps1`** | Install skill into `%USERPROFILE%\.agents\skills\pr-review` (Link / Clone / Copy) |
 | **`setup-pr-review.ps1`** | MCP sync, local Git exclude entry, CLI markers (run per repo under review) |
 | **`pr-review.config.local.json.example`** | Template for per-machine config |
 | **`mcp.json`** | Atlassian MCP template |
