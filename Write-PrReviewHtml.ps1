@@ -190,6 +190,21 @@ Set-Content -LiteralPath $OutputPath -Value $html -Encoding utf8 -NoNewline
 Write-Host "Wrote PR review HTML: $OutputPath"
 
 if (-not $NoOpen) {
-    Start-Process -FilePath $OutputPath
-    Write-Host "Opened in default browser."
+    try {
+        Start-Process -FilePath $OutputPath -ErrorAction Stop | Out-Null
+        Write-Host "Opened in default browser."
+    }
+    catch {
+        try {
+            # Fallback: delegate to explorer.exe, which resolves the default-browser
+            # file association even when Start-Process's ShellExecute call fails
+            # (e.g. when this script runs outside a normal interactive session).
+            Start-Process -FilePath 'explorer.exe' -ArgumentList $OutputPath -ErrorAction Stop | Out-Null
+            Write-Host "Opened in default browser (via explorer)."
+        }
+        catch {
+            Write-Warning "Could not open the review HTML automatically: $($_.Exception.Message)"
+            Write-Warning "Open it manually: $OutputPath"
+        }
+    }
 }
