@@ -1,4 +1,8 @@
-# Syncs Cursor MCP config into the target repo and excludes it via .git/info/exclude.
+# Syncs this skill's Atlassian MCP server into the target repo's MCP config for each
+# supported agent tool, excluded via .git/info/exclude so it doesn't dirty the shared repo:
+#   - Cursor:      <repo>\.cursor\mcp.json         (whole file synced)
+#   - Claude Code: <repo>\.mcp.json                (Atlassian-MCP-Server merged in; other
+#                                                    servers already in the file are left alone)
 # Usage: .\setup-pr-review.ps1 [-RepoPath D:\projects\foo]
 # Or from repo root: .\path\to\setup-pr-review.ps1
 
@@ -100,7 +104,7 @@ function Add-GitInfoExcludeEntry {
     }
 
     $prefix = if ([string]::IsNullOrWhiteSpace($excludeContent)) { '' } else { "`n" }
-    Add-Content -LiteralPath $excludePath -Value "$prefix# Cursor MCP (local duplicate of global; not committed)`n$Entry"
+    Add-Content -LiteralPath $excludePath -Value "$prefix# pr-review skill MCP config (local duplicate of global; not committed)`n$Entry"
     Write-Host "Added $Entry to .git/info/exclude"
 }
 
@@ -161,6 +165,68 @@ function Sync-CursorMcpConfig {
     return $newlyCreated
 }
 
+function Sync-ClaudeMcpConfig {
+    <#
+    Claude Code reads project-scope MCP servers from <repo>\.mcp.json, a plain
+    { "mcpServers": { ... } } file (same shape as Cursor's mcp.json). Unlike the
+    Cursor sync above, this merges just the Atlassian-MCP-Server entry into any
+    existing file instead of overwriting it wholesale, since .mcp.json commonly
+    already holds other project MCP servers unrelated to this skill.
+    #>
+    param(
+        [string] $RepoPath = (Get-Location).Path,
+        [string] $PrReviewsPath = $PSScriptRoot
+    )
+    $source = Join-Path $PrReviewsPath 'mcp.json'
+    $target = Join-Path $RepoPath '.mcp.json'
+
+    if (Test-Path -LiteralPath $source) {
+        $desiredContent = Get-Content -LiteralPath $source -Raw
+        Write-Verbose "Using mcp.json from skill directory: $source"
+    } else {
+        $desiredContent = $DefaultMcpJson
+        Write-Host "No mcp.json at $source; using built-in Atlassian MCP config."
+    }
+
+    $changed = $false
+
+    if (-not (Test-Path -LiteralPath $target)) {
+        Set-Content -LiteralPath $target -Value $desiredContent -Encoding utf8 -NoNewline
+        Write-Host "Wrote .mcp.json (Claude Code project MCP config) to $target"
+        $changed = $true
+    } else {
+        try {
+            $existingObj = Get-Content -LiteralPath $target -Raw | ConvertFrom-Json -ErrorAction Stop
+        } catch {
+            Write-Warning "Could not parse existing $target as JSON; leaving it untouched. Add the Atlassian-MCP-Server entry manually if Claude Code needs it: $source"
+            $existingObj = $null
+        }
+
+        if ($existingObj) {
+            if (-not $existingObj.mcpServers) {
+                $existingObj | Add-Member -NotePropertyName mcpServers -NotePropertyValue ([pscustomobject]@{}) -Force
+            }
+
+            if ($existingObj.mcpServers.PSObject.Properties.Name -contains 'Atlassian-MCP-Server') {
+                Write-Host "Atlassian-MCP-Server already present in $target"
+            } else {
+                $atlassianEntry = ($desiredContent | ConvertFrom-Json).mcpServers.'Atlassian-MCP-Server'
+                $existingObj.mcpServers | Add-Member -NotePropertyName 'Atlassian-MCP-Server' -NotePropertyValue $atlassianEntry -Force
+                $updatedJson = $existingObj | ConvertTo-Json -Depth 10
+                Set-Content -LiteralPath $target -Value $updatedJson -Encoding utf8
+                Write-Host "Added Atlassian-MCP-Server to existing $target (JSON was reformatted - review the diff before committing)."
+                $changed = $true
+            }
+        }
+    }
+
+    if (Test-Path -LiteralPath $target) {
+        Add-GitInfoExcludeEntry -RepoPath $RepoPath -Entry '.mcp.json'
+    }
+
+    return $changed
+}
+
 function Set-BitbucketCliVerifiedMarker {
     <#
     Creates .bb-cli-verified next to this script after the first successful bb check.
@@ -209,18 +275,22 @@ function Set-GitHubCliVerifiedMarker {
     Write-Host "Recorded GitHub CLI (gh) verification: $marker"
 }
 
-Write-Host "Syncing Cursor MCP config for repo: $RepoPath"
-$mcpCreated = Sync-CursorMcpConfig -RepoPath $RepoPath -PrReviewsPath $PSScriptRoot
+Write-Host "Syncing MCP config for repo: $RepoPath"
+$cursorMcpChanged = Sync-CursorMcpConfig -RepoPath $RepoPath -PrReviewsPath $PSScriptRoot
+$claudeMcpChanged = Sync-ClaudeMcpConfig -RepoPath $RepoPath -PrReviewsPath $PSScriptRoot
 Set-BitbucketCliVerifiedMarker
 Set-GitHubCliVerifiedMarker
 
 $prConfig = Get-PrReviewConfig -SkillRoot $PSScriptRoot
 Ensure-PrReviewOutputRoot -OutputRoot $prConfig.prOutputLocation
 
-if ($mcpCreated) {
-    Write-Host ""
-    Write-Host "Next: restart Cursor (new .cursor/mcp.json), then re-run the pr-review skill."
-} else {
-    Write-Host ""
+Write-Host ""
+if ($cursorMcpChanged) {
+    Write-Host "Next: restart Cursor (new/updated .cursor/mcp.json), then re-run the pr-review skill."
+}
+if ($claudeMcpChanged) {
+    Write-Host "Next: restart Claude Code (or run /mcp) to pick up the new/updated .mcp.json, then re-run the pr-review skill."
+}
+if (-not $cursorMcpChanged -and -not $claudeMcpChanged) {
     Write-Host "Next: agent verifies Atlassian MCP auth (getAccessibleAtlassianResources) before fetching Jira."
 }

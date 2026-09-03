@@ -40,25 +40,34 @@ If **unsupported**, stop and tell the user this skill supports **Bitbucket Cloud
 Use **only** the workflow for the detected provider below. The review checklist, Jira fetch, config, and deliverable template are shared.
 
 ### Configure Jira MCP
-**Run `setup-pr-review.ps1` first** so Cursor MCP servers (e.g. Jira/Atlassian) are available for the repository under review. The script lives in **this skill’s directory** (same folder as `SKILL.md`), next to `setup-pr-review.ps1`. If `mcp.json` is not present beside the script, a built-in Atlassian MCP config is written automatically; an optional `mcp.json` in that folder overrides it. When the target repo has `.cursor/mcp.json`, setup adds that path to the repo-local `.git/info/exclude`; it must not edit `.gitignore`.
+**Run `setup-pr-review.ps1` first** so MCP servers (e.g. Jira/Atlassian) are available for the repository under review. The script lives in **this skill’s directory** (same folder as `SKILL.md`), next to `setup-pr-review.ps1`. If `mcp.json` is not present beside the script, a built-in Atlassian MCP config is written automatically; an optional `mcp.json` in that folder overrides it.
 
-1. Set **`-RepoPath`** to the **absolute path to the git repository root** for the PR — ideally the folder you already opened in Cursor (see **Open the repository in your editor first**).
-2. Before setup, check whether `<repo-root>\.cursor\mcp.json` already exists.
+One run wires MCP for **every supported agent editor at once**, each into that editor’s own config file in the repo, each excluded via the repo-local `.git/info/exclude` (never `.gitignore`, so it doesn’t dirty the shared repo):
+
+- **Cursor** — `<repo-root>\.cursor\mcp.json` (whole file synced to match this skill’s `mcp.json`).
+- **Claude Code** — `<repo-root>\.mcp.json` (the `Atlassian-MCP-Server` entry is merged in; any other servers already in that file, e.g. project-specific ones the team committed, are left untouched).
+
+You only need to care about the file for the editor you’re actually using; the script still touches both so switching tools later just works.
+
+1. Set **`-RepoPath`** to the **absolute path to the git repository root** for the PR — ideally the folder you already opened in your agent editor (see **Open the repository in your editor first**).
+2. Before setup, check whether `<repo-root>\.cursor\mcp.json` and/or `<repo-root>\.mcp.json` already exist (so you can tell later whether the run changed anything).
 3. Execute from a terminal (PowerShell):
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File "<pr-review-skill-directory>\setup-pr-review.ps1" -RepoPath "<repo-root>"
 ```
 
-If you use a `git worktree` for the PR, set `-RepoPath` to the **worktree directory** you opened in Cursor (not the original repo folder), so `.cursor/mcp.json` is present in the workspace you’re reviewing from.
+If you use a `git worktree` for the PR, set `-RepoPath` to the **worktree directory** you opened in your agent editor (not the original repo folder), so the MCP config lands in the workspace you’re reviewing from.
 
 Example (script lives next to this skill’s `SKILL.md`):
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.cursor\skills\pr-review\setup-pr-review.ps1" -RepoPath "D:\projects\your-repo"
+powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.agents\skills\pr-review\setup-pr-review.ps1" -RepoPath "D:\projects\your-repo"
 ```
 
-If `<repo-root>\.cursor\mcp.json` did **not** exist before setup and the script creates it, stop the review and prompt the user: “A new `.cursor/mcp.json` was created for this repository and ignored via `.git/info/exclude`. Please restart Cursor or the agent editor you are using, then rerun `/pr-review`.” Do not fetch PR metadata, diff, comments, or Jira until the user restarts and reruns the skill.
+(Use your actual install path — see `Install-PrReviewSkill.ps1` in the readme — if this skill is installed somewhere other than `.agents\skills\pr-review`, e.g. under `.claude\skills\pr-review` for Claude Code.)
+
+The script prints one `Next: restart <tool> ...` line per config it newly created or changed. If it names **your** editor — e.g. a new/updated `.cursor/mcp.json` for Cursor, or a new/updated `.mcp.json` for Claude Code — stop the review and prompt the user: “A new/updated MCP config was written for this repository (ignored via `.git/info/exclude`). Please restart `<tool>` (or run `/mcp` in Claude Code), then rerun `/pr-review`.” Do not fetch PR metadata, diff, comments, or Jira until the user restarts and reruns the skill. Ignore a `Next:` line for a **different** editor than the one in use.
 
 If the script exits successfully and `mcp.json` was already in sync, output may be minimal; still run it so the agent’s environment matches. **Do not skip this step** before fetching PR metadata, diff, comments, or Jira.
 
@@ -71,7 +80,7 @@ You only need the marker for the provider you are reviewing; setup tries both wh
 
 ### Verify Atlassian MCP authorization
 
-`setup-pr-review.ps1` only writes `.cursor/mcp.json`; it **cannot** confirm OAuth/API-token auth. After setup completes — and **after** any Cursor restart required for a **newly created** `mcp.json` — verify Jira access **before** fetching PR metadata or Jira issues.
+`setup-pr-review.ps1` only writes the MCP config files (see **Configure Jira MCP** above); it **cannot** confirm OAuth/API-token auth. After setup completes — and **after** any editor restart required for a **newly created or changed** MCP config — verify Jira access **before** fetching PR metadata or Jira issues.
 
 1. Call MCP tool **`getAccessibleAtlassianResources`** on server **`Atlassian-MCP-Server`** (no arguments). Optionally confirm identity with **`atlassianUserInfo`**.
 2. Treat as **authorized** when the call succeeds and at least one returned site includes **`read:jira-work`** in `scopes` (note the site `url` / `id` as `cloudId` for later Jira calls).
@@ -79,7 +88,7 @@ You only need the marker for the provider you are reviewing; setup tries both wh
 
 **When not authorized**, stop and prompt the user (do not fetch Jira yet):
 
-> Atlassian MCP is not authorized for Jira. In Cursor: **Settings → MCP → Atlassian-MCP-Server** → **Connect** / **Authorize** and complete the browser OAuth flow for your Jira site (e.g. `smokeball.atlassian.net`). If your org uses API-token auth instead, add the `Authorization` header to the skill’s `mcp.json` and re-run setup. Reply **done** when authorization is complete.
+> Atlassian MCP is not authorized for Jira. In Cursor: **Settings → MCP → Atlassian-MCP-Server** → **Connect** / **Authorize** and complete the browser OAuth flow for your Jira site (e.g. `smokeball.atlassian.net`). In Claude Code: run `/mcp` (or `claude mcp`) and authorize **Atlassian-MCP-Server** there. If your org uses API-token auth instead, add the `Authorization` header to the skill’s `mcp.json` and re-run setup. Reply **done** when authorization is complete.
 
 Then **retry** `getAccessibleAtlassianResources`. You may retry up to **two** times after the user confirms.
 
@@ -87,7 +96,7 @@ Then **retry** `getAccessibleAtlassianResources`. You may retry up to **two** ti
 
 | Situation | Action |
 |-----------|--------|
-| **New** `.cursor/mcp.json` was just created | **Stop.** User must **restart Cursor**, then **re-run** the skill (MCP config loads at startup). |
+| **New or changed** MCP config for the editor in use (`.cursor/mcp.json` for Cursor, `.mcp.json` for Claude Code) | **Stop.** User must **restart that editor** (or run `/mcp` in Claude Code), then **re-run** the skill (MCP config loads at startup). |
 | **OAuth not yet granted** (MCP already loaded) | **Stay in this invocation.** User authorizes in Settings → MCP; you retry the probe when they reply **done**. No restart or skill re-run needed. |
 | **Auth probe still fails** after retries | **Continue** the review without Jira: use PR title/description for alignment and set `*fetch failed: Atlassian MCP not authorized*` on the Jira line. |
 
@@ -160,7 +169,7 @@ Skills cannot store state by themselves. Use marker files next to `SKILL.md`:
   3. If not found in either, use `NOJIRA`.
 - **Repo context** (solution, projects) for inspections.
 
-**Workflow order:** (0) Prefer workspace already opened in editor. (1) Run **`setup-pr-review.ps1`** with that repo’s root as `-RepoPath`. (1b) If setup created a new `.cursor/mcp.json`, stop for Cursor restart + skill re-run; otherwise **verify Atlassian MCP authorization** (see above). (2) **Detect PR host**. (3) **Load configuration**. (4) Gather provider inputs (`bb` or `gh`). (5) **Resolve local clone path** if local sync needed. (6) **Local repository sync** (optional).
+**Workflow order:** (0) Prefer workspace already opened in editor. (1) Run **`setup-pr-review.ps1`** with that repo’s root as `-RepoPath`. (1b) If setup created or changed the MCP config for the editor in use, stop for that editor’s restart + skill re-run; otherwise **verify Atlassian MCP authorization** (see above). (2) **Detect PR host**. (3) **Load configuration**. (4) Gather provider inputs (`bb` or `gh`). (5) **Resolve local clone path** if local sync needed. (6) **Local repository sync** (optional).
 
 ## Resolve local clone path
 
@@ -216,7 +225,7 @@ Provider **`pr diff`** is sufficient for **what changed**. Use a **local checkou
 
 1. Confirm repo: `git rev-parse --show-toplevel` and that `origin` matches the PR repository id.
 2. `git fetch origin` (and other remotes if the head branch is not on `origin`).
-3. Dirty tree check. Setup-created `.cursor/mcp.json` should be ignored through `.git/info/exclude`, so it should not dirty the repo and `.gitignore` should not change. If the tree is still dirty, treat it as real user or pre-existing work: never revert it, use a worktree, and do **not** use `--no-checkout`.
+3. Dirty tree check. Setup-created/updated `.cursor/mcp.json` and `.mcp.json` should be ignored through `.git/info/exclude`, so they should not dirty the repo and `.gitignore` should not change. If the tree is still dirty, treat it as real user or pre-existing work: never revert it, use a worktree, and do **not** use `--no-checkout`.
 
 ```powershell
 $status = git status --porcelain
@@ -260,7 +269,7 @@ git checkout $reviewBranch
 
 If a worktree was accidentally created with `--no-checkout` and checkout/fetch fails, remove that worktree and recreate it from `$baseRef`; do not inspect or report against an empty worktree that appears as a giant delete set.
 
-**After checkout:** Open the checked-out directory in Cursor (in-place clone or `$worktreePath`).
+**After checkout:** Open the checked-out directory in your agent editor (in-place clone or `$worktreePath`).
 
 Keep using provider **`pr diff`** and **comments** for authoritative diff/thread; checkout does not replace them.
 

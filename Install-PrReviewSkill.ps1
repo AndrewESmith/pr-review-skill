@@ -1,4 +1,9 @@
 # Installs the pr-review agent skill into %USERPROFILE%\.agents\skills\pr-review
+# This is the shared, tool-agnostic install location (the emerging "Agent Skills" convention).
+# Cursor reads it directly; other editors (e.g. Claude Code) that only look in their own
+# skills folder need a one-time symlink/junction from this target into that folder - see
+# the "Next" steps printed at the end of this script, or the readme's
+# "Making it available to more than one tool" section.
 # Usage (from this repo):
 #   .\Install-PrReviewSkill.ps1 -Mode Link
 #   .\Install-PrReviewSkill.ps1 -Mode Clone
@@ -258,8 +263,14 @@ switch ($Mode) {
     }
 }
 
+$targetFull = (Resolve-Path -LiteralPath $Target).Path
+$claudeSkillsTarget = Join-Path $env:USERPROFILE '.claude\skills\pr-review'
+
 Write-Host ''
 Write-Host 'Next:'
 Write-Host '  1. Edit pr-review.config.local.json under the install target (paths are per machine).'
-Write-Host '  2. Start a new Cursor Agent chat (or restart Cursor) so the skill is discovered.'
-Write-Host '  3. Per repo under review, run setup-pr-review.ps1 with -RepoPath (not required for skill file updates).'
+Write-Host '  2. Start a new Agent chat (or restart) in whichever agent tool(s) you use so the skill is discovered.'
+Write-Host '  3. Using more than one agent tool (e.g. Cursor + Claude Code)? This target is the shared copy;'
+Write-Host '     mirror it into any tool that only reads its own skills folder. For Claude Code (one-time):'
+Write-Host "       cmd /c mklink /J `"$claudeSkillsTarget`" `"$targetFull`""
+Write-Host '  4. Per repo under review, run setup-pr-review.ps1 with -RepoPath (not required for skill file updates).'

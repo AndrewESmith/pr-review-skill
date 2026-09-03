@@ -11,11 +11,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `Install-PrReviewSkill.ps1` with `-Mode Link`, `Clone`, or `Copy` for personal Cursor skills install.
 - `pr-review.config.local.json.example` for first-time per-machine configuration.
+- `setup-pr-review.ps1` now also syncs a project `<repo>\.mcp.json` for Claude Code alongside the existing `.cursor\mcp.json` for Cursor: creates it if missing, or merges in just the `Atlassian-MCP-Server` entry if the file already exists (leaving any other configured servers untouched). Both files are excluded via `.git/info/exclude`.
 
 ### Changed
 
 - `readme.md` documents install modes for maintainers vs teammates; fixes `SKILL.md` setup path to `.cursor\skills`.
 - Finding severity is now stated once, on the `### F1 — Title — Severity: High` heading, instead of a separate `**Severity:**` body bullet; `pr-review-page.js` reads it from the heading and renders a labelled `Severity: <level>` badge there.
+- Docs (`SKILL.md`, `readme.md`) now describe install/setup as shared across agent tools (Cursor, Claude Code) rather than Cursor-only; documents mirroring the shared skill install into `.claude\skills` via directory junction.
+- Write-PrReviewHtml.ps1's browser-open step falls back to `explorer.exe` and warns instead of throwing when `Start-Process` fails to launch the default browser.
 
 ### Fixed
 

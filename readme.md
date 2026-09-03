@@ -4,7 +4,9 @@ Agent Agent Skill for constraint-driven reviews of team PRs on **Bitbucket Cloud
 
 ## Making the skill available to your agent
 
-Agent loads skills from folders that contain a **`SKILL.md`** file. Install **this entire repository** (not `SKILL.md` alone)—the agent also needs `setup-pr-review.ps1`, `Write-PrReviewHtml.ps1`, `assets/`, `pr-review.config.json`, and `mcp.json`.
+This skill is shared across whichever AI coding tools you use (Cursor, Claude Code, etc.)—it's plain files under an **Agent Skills**-style folder, not something tied to one tool. Each tool loads skills from folders that contain a **`SKILL.md`** file. Install **this entire repository** (not `SKILL.md` alone)—the agent also needs `setup-pr-review.ps1`, `Write-PrReviewHtml.ps1`, `assets/`, `pr-review.config.json`, and `mcp.json`.
+
+Keep **one** installed copy and point every tool at it: install once to `%USERPROFILE%\.agents\skills\pr-review\` (Cursor reads this location directly), then symlink/junction that folder into any other tool's own skills folder—e.g. `%USERPROFILE%\.claude\skills\pr-review\` for Claude Code. See **Making it available to more than one tool** below.
 
 ### Choose where to install
 
@@ -61,9 +63,20 @@ Parameters:
 
 On first install, if `pr-review.config.local.json` is missing, the script creates it from **`pr-review.config.local.json.example`**. Edit that file for your machine paths.
 
-**After any install:** start a **new Agent chat** (or restart Cursor) so the skill is discovered.
+**After any install:** start a **new Agent chat** (or restart your agent tool) so the skill is discovered.
 
 **Junction safety:** If you replace a `Link` install, the script uses `rmdir` on the junction path only — it does not delete your dev clone.
+
+### Making it available to more than one tool
+
+Install once (any `-Mode`) to the default target, `%USERPROFILE%\.agents\skills\pr-review\`—Cursor reads it there directly. For each additional tool that only looks in its own skills folder, create a one-time directory junction from that folder to the shared install, so there's still a single copy to update:
+
+```powershell
+# Claude Code
+cmd /c mklink /J "%USERPROFILE%\.claude\skills\pr-review" "%USERPROFILE%\.agents\skills\pr-review"
+```
+
+`Install-PrReviewSkill.ps1` prints this exact command (with your resolved paths) at the end of every run. Refreshing the shared install (e.g. `-Mode Copy -Force`, or `git pull` for a `Link`/`Clone` install) updates every tool through the junction—no need to repeat it per tool.
 
 ### Manual install (without the script)
 
@@ -93,7 +106,7 @@ Same file layout under **`.agents/skills/pr-review/`** in the repository you sha
 - In **Agent** chat, type **`@`** and look for **pr-review** or **Pull Request Review** in the skill list, or
 - Ask explicitly: *“Review this PR using the pr-review skill: &lt;PR URL&gt;”*
 
-The skill’s YAML **`description`** tells Cursor when to apply it automatically (e.g. when you ask for a PR review and provide a URL). Naming the skill in the prompt avoids ambiguity if several skills match.
+The skill’s YAML **`description`** tells your agent tool when to apply it automatically (e.g. when you ask for a PR review and provide a URL). Naming the skill in the prompt avoids ambiguity if several skills match.
 
 ### Paths in prompts and setup
 
@@ -108,9 +121,9 @@ If you keep the repo elsewhere, always pass the **full path to `setup-pr-review.
 ## Before you start (recommended)
 
 1. **Clone or locate** the repository on disk.
-2. **Open that folder in Cursor** (*File → Open Folder*) so it is the workspace root—or open a PR worktree folder.
+2. **Open that folder in your agent tool** (Cursor: *File → Open Folder*; Claude Code: launch from that directory) so it is the workspace root—or open a PR worktree folder.
 3. Run setup from that context (see [Setup](#setup)).
-4. If setup creates `.cursor/mcp.json`, restart Cursor or your agent editor, then rerun `/pr-review`.
+4. Setup wires MCP for both Cursor (`.cursor/mcp.json`) and Claude Code (`.mcp.json`) in one run. If it created or changed the file for **your** tool, restart that tool (or run `/mcp` in Claude Code) then rerun `/pr-review`—see **Configure Jira MCP** in `SKILL.md`.
 5. Start a **new Agent chat** with the **PR URL**.
 
 Opening the repo first avoids path guessing when clones live in different directories. The skill uses the workspace first, then config maps, then search roots, then asks you.
@@ -169,7 +182,7 @@ Legacy single **`reposRoot`** in JSON is still read as one `reposRoots` entry.
 
 | Priority | Source |
 |----------|--------|
-| 1 | **Cursor workspace** (if `origin` matches the PR repo) |
+| 1 | **Agent tool workspace** (if `origin` matches the PR repo) |
 | 2 | **`repoPaths["workspace/repo"]`** or **`repoPaths["owner/repo"]`** |
 | 3 | **Search** each path in **`reposRoots`** for a matching `<repo-slug>` folder |
 | 4 | **Ask** you for the absolute path, or skip local sync |
@@ -180,8 +193,8 @@ You can also paste `Clone path: D:\...\repo` in the chat for one-off reviews.
 
 | Requirement | When |
 |-------------|------|
-| **Cursor** + this skill | Always |
-| **Repo opened in Cursor** | Strongly recommended |
+| **An agent tool that loads Agent Skills** (Cursor, Claude Code, etc.) + this skill | Always |
+| **Repo opened in that tool** | Strongly recommended |
 | **PR URL** | Always |
 | **`bb`** + auth | Bitbucket PRs |
 | **`gh`** + auth | GitHub PRs |
@@ -191,21 +204,21 @@ You can also paste `Clone path: D:\...\repo` in the chat for one-off reviews.
 
 ## Setup
 
-With the **target repo folder open in Cursor**, run (adjust paths):
+With the **target repo folder open in your agent tool**, run (adjust paths):
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File "$env:USERPROFILE\.agents\skills\pr-review\setup-pr-review.ps1" -RepoPath "D:\path\to\that-repo"
 ```
 
-(Use your actual install path if the skill folder is not under `.agents\skills\pr-review`.)
+(Use your actual install path if the skill folder is not under `.agents\skills\pr-review`—e.g. `.claude\skills\pr-review` if you're running it from the Claude Code junction.)
 
 `-RepoPath` should be the workspace root you opened—not the skill folder.
 
-The script syncs **`mcp.json`**, verifies **`bb`** / **`gh`** when on PATH, and ensures **`prOutputLocation`** exists. When `<repo>\.cursor\mcp.json` exists, it adds `.cursor/mcp.json` to that repo’s **`.git/info/exclude`** instead of editing `.gitignore`, so the local MCP file stays uncommitted without dirtying the shared repo files.
+The script wires this skill's Atlassian MCP server into **every supported agent tool's own config** in one run: it syncs **`mcp.json`** into `<repo>\.cursor\mcp.json` for Cursor, and merges the same server entry into `<repo>\.mcp.json` for Claude Code (leaving any other servers already in that file alone). It also verifies **`bb`** / **`gh`** when on PATH and ensures **`prOutputLocation`** exists. Both MCP files are added to that repo's **`.git/info/exclude`** instead of `.gitignore`, so they stay uncommitted without dirtying the shared repo files. Still run it regardless of which tool you use—the `bb`/`gh` checks and `prOutputLocation` setup apply to every tool, and touching both configs means switching tools later needs no re-setup.
 
-If setup creates `.cursor/mcp.json`, restart Cursor or your agent editor, then rerun `/pr-review`. Cursor loads MCP configuration at startup, so the first run stops there on purpose.
+If setup created or changed the MCP config for **your** tool, restart it (Cursor: relaunch; Claude Code: run `/mcp` or restart), then rerun `/pr-review`—MCP configuration loads at startup, so the first run stops there on purpose. Ignore the message if it names a different tool than the one you're using.
 
-After MCP is loaded, the agent probes Jira access via **`getAccessibleAtlassianResources`**. If OAuth is not granted, it asks you to authorize under **Settings → MCP → Atlassian-MCP-Server**; you can reply **done** and the **same** chat continues — no second skill invocation unless MCP config was newly created.
+After MCP is loaded, the agent probes Jira access via **`getAccessibleAtlassianResources`**. If OAuth is not granted, it asks you to authorize (in Cursor: **Settings → MCP → Atlassian-MCP-Server**; in Claude Code: `/mcp`); you can reply **done** and the **same** chat continues — no second skill invocation unless MCP config was newly created.
 
 ## Run a review
 
@@ -219,7 +232,7 @@ Flow: open repo → setup → restart/rerun if MCP was newly created → PR URL 
 
 ## Local sync and worktrees
 
-The setup-created `.cursor/mcp.json` is ignored via `.git/info/exclude`, so it should not force a worktree. If the target repo is still dirty because of real local work, the skill uses a timestamped worktree created from the PR base branch, never `--no-checkout`.
+The setup-created/updated `.cursor/mcp.json` and `.mcp.json` are ignored via `.git/info/exclude`, so they should not force a worktree. If the target repo is still dirty because of real local work, the skill uses a timestamped worktree created from the PR base branch, never `--no-checkout`.
 
 If provider checkout fails, for example Bitbucket CLI cannot recognize a non-standard Bitbucket remote URL, the skill keeps the populated worktree and fetches the PR source branch directly with `git fetch origin <source>:refs/heads/<review-branch>`.
 
@@ -259,6 +272,6 @@ Comments travel with the file when shared.
 ## Notes
 
 - **`.bb-cli-verified` / `.gh-cli-verified`:** Delete and re-run setup if a CLI breaks.
-- **`.cursor/mcp.json`:** Written into the reviewed repo and ignored through `.git/info/exclude`, not `.gitignore`.
+- **`.cursor/mcp.json` / `.mcp.json`:** Written (or merged, for `.mcp.json`) into the reviewed repo and ignored through `.git/info/exclude`, not `.gitignore`.
 - **No local tree:** If clone path cannot be resolved, review can still proceed from diff/API only (called out in the write-up).
 - **GHE:** Set `githubHost`; agent uses `GH_HOST` / `gh --hostname`.
