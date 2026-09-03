@@ -62,38 +62,62 @@
     return "neutral";
   }
 
+  var SEVERITY_HEADING_RE = /^(.*?)\s*[—–-]\s*Severity:\s*(High|Med(?:ium)?|Low)\s*$/i;
+
+  function normalizeSeverity(word) {
+    var lower = (word || "").toLowerCase();
+    if (lower === "high") return { cls: "high", label: "High" };
+    if (lower === "low") return { cls: "low", label: "Low" };
+    if (lower.indexOf("med") === 0) return { cls: "med", label: "Medium" };
+    return null;
+  }
+
   function enhanceFindings(container) {
     var headings = container.querySelectorAll("h3");
     headings.forEach(function (h3) {
-      if (!/^F\d+\s*[—–-]/.test(h3.textContent.trim())) return;
+      var headingText = h3.textContent.trim();
+      if (!/^F\d+\s*[—–-]/.test(headingText)) return;
 
       var card = document.createElement("div");
       card.className = "finding-card";
       h3.parentNode.insertBefore(card, h3);
       card.appendChild(h3);
 
-      var severity = "low";
-      var badge = document.createElement("span");
-      badge.className = "severity-badge";
-
-      var sibling = h3.nextElementSibling;
-      while (sibling && sibling.tagName !== "H3" && sibling.tagName !== "H2" && sibling.tagName !== "H1") {
-        var next = sibling.nextElementSibling;
-        card.appendChild(sibling);
-
-        var text = sibling.textContent || "";
-        if (/Severity:\s*High/i.test(text)) {
-          severity = "high";
-        } else if (/Severity:\s*Med/i.test(text)) {
-          severity = "med";
-        }
-
-        sibling = next;
+      // Preferred: "F1 — Title — Severity: High" on the heading itself.
+      var severity = null;
+      var match = headingText.match(SEVERITY_HEADING_RE);
+      if (match) {
+        severity = normalizeSeverity(match[2]);
+        h3.textContent = match[1];
       }
 
-      badge.className += " severity-" + severity;
-      badge.textContent = severity === "high" ? "High" : severity === "med" ? "Med" : "Low";
+      // Fallback for older reports that put "**Severity:** High" in the body.
+      if (!severity) {
+        var sibling = h3.nextElementSibling;
+        while (sibling && sibling.tagName !== "H3" && sibling.tagName !== "H2" && sibling.tagName !== "H1") {
+          var text = sibling.textContent || "";
+          var bodyMatch = text.match(/Severity:\s*(High|Med(?:ium)?|Low)/i);
+          if (bodyMatch) {
+            severity = normalizeSeverity(bodyMatch[1]);
+            break;
+          }
+          sibling = sibling.nextElementSibling;
+        }
+      }
+
+      var badge = document.createElement("span");
+      badge.className = "severity-badge severity-" + (severity ? severity.cls : "unknown");
+      badge.textContent = "Severity: " + (severity ? severity.label : "Unknown");
       h3.appendChild(badge);
+
+      // Body siblings still need to be moved into the card even when severity
+      // was found on the heading (the loop above only walked them to search).
+      var node = h3.nextElementSibling;
+      while (node && node.tagName !== "H3" && node.tagName !== "H2" && node.tagName !== "H1") {
+        var nextNode = node.nextElementSibling;
+        card.appendChild(node);
+        node = nextNode;
+      }
     });
   }
 

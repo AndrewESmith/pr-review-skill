@@ -15,6 +15,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - `readme.md` documents install modes for maintainers vs teammates; fixes `SKILL.md` setup path to `.cursor\skills`.
+- Finding severity is now stated once, on the `### F1 — Title — Severity: High` heading, instead of a separate `**Severity:**` body bullet; `pr-review-page.js` reads it from the heading and renders a labelled `Severity: <level>` badge there.
+
+### Fixed
+
+- Findings whose severity badge silently defaulted to "Low" when the body's `Severity:` text didn't match the detection regex now show a distinct "Severity: Unknown" badge instead of a misleading Low.
 
 ## [0.3.0] - 2026-06-05
 

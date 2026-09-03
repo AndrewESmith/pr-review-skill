@@ -291,6 +291,7 @@ git worktree remove $worktreePath
    - **Findings:** correctness, security, reliability, API breaks, perf regressions, architecture violations **introduced or worsened by this diff**.
    - **Framework notes (item 6):** language/runtime/DI/EF/async conventions **only if** not already a Finding; ≤5 bullets; omit section if empty.
    - **Test coverage (template):** test quality and gaps — do not repeat missing-test warnings as Findings unless concrete (e.g. new public API with zero tests).
+   - **Existing PR comments:** before drafting a Finding, check it against the comments/threads gathered in **Required Inputs**. If a reviewer or the author already raised the same issue (whether resolved, acknowledged, or still open), **do not** re-raise it as a new Finding with full detail — mention it once in **Existing discussion** instead. Only promote it to a Finding if you disagree with how it was addressed or have new evidence (e.g. the fix looks incomplete) — in that case say explicitly what the existing comment missed.
 
    **Prove from diff:** Only report if you can cite `file:line` (or hunk) in the PR diff, or a symbol **added** in the diff that is referenced but not defined (after reading the tree when needed).
 
@@ -366,7 +367,7 @@ Rules:
 - Re-review: append `## Re-review <yyyy-MM-dd>` to markdown content before calling the script (unless user says overwrite)
 - Before writing: read existing `*.html` in folder; extract embedded markdown from `<script type="application/json" id="review-source">` in prior reviews; don’t re-raise settled findings
 - If a Jira key is found (via **Jira key** extraction in **Required Inputs**), **fetch issue** and compare with the implementation (acceptance criteria, status).
-- If **prior PR comments** are available (Bitbucket: `bb pr view --comments`; GitHub: `gh pr view --comments` and API as needed), synthesize them in **Existing discussion** and avoid duplicating settled points unless you disagree or add evidence.
+- If **prior PR comments** are available (Bitbucket: `bb pr view --comments`; GitHub: `gh pr view --comments` and API as needed), synthesize them in **Existing discussion** and avoid duplicating settled points unless you disagree or add evidence. This applies to **Findings** too: if a comment thread already covers an issue, do not restate it as a new Finding — see the routing rule in Review Scope item 5.
 - If **no tests changed**, flag a “human review” check to confirm no tests are required.
 
 **Workflow:** Compose review content per the Template below (markdown), then run:
@@ -411,13 +412,12 @@ Follow routing in Review Scope item 5.
 (skip if provider comment fetch is empty)
 
 ## Findings
-### F1 — <short title>
+### F1 — <short title> — Severity: High | Med | Low
 
 - **Location:** …
 - **Issue:** …
 - **Why it matters:** …
 - **Proposed change:** …
-- **Severity:** High | Med | Low
 
 ## Test coverage
 - Changed tests: …
