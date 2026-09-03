@@ -1,5 +1,5 @@
 ---
-name: Pull Request Review (C#/.NET)
+name: Pull_Request_Review_And_Report
 description: Perform a precise, constraint-driven review of a Bitbucket or GitHub PR diff against C#/.NET standards and the linked Jira issue. Skill is to be used to review other team members pull requests so only apply this skill if a URL has been provided for the review
 ---
 
